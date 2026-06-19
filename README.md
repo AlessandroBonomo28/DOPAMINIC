@@ -1,6 +1,6 @@
 # DOPAMINIC
 
-<img width="400" height="225" alt="2026-06-19 23-37-29" src="https://github.com/user-attachments/assets/5a476cfc-3f7a-4acc-8434-1a4ffe4544dd" />
+<img width="100%"  alt="2026-06-19 23-37-29" src="https://github.com/user-attachments/assets/5a476cfc-3f7a-4acc-8434-1a4ffe4544dd" />
 
 Prendi un video lungo e in pochi minuti ne tiri fuori una manciata di short verticali pronti da pubblicare, senza mandare niente in giro per internet e senza API a pagamento. Tutto gira sul tuo PC.
 
