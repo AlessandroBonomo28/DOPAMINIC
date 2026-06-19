@@ -48,18 +48,6 @@ pip install faster-whisper    # per i sottotitoli
 
 Il modello Whisper (tiny, base, small, medium oppure large-v3) si scarica al primo utilizzo. Dimensione e lingua le scegli dall'interfaccia e restano salvate.
 
-## L'interfaccia
-
-Tre schede in alto: Genera, YouTube e Impostazioni.
-
-Nella scheda Genera scegli il video, imposti quanti short vuoi e quanto devono durare, e accendi quello che ti serve: watermark con il tuo testo, face-tracking, sottotitoli con lingua e modello, stile dei sottotitoli (font, dimensione, contorno, colore) con anteprima dal vivo. Premi GENERA SHORTS e il log in basso ti dice a che punto è. Quando ha finito apri la cartella di output con un pulsante.
-
-A tenerti compagnia mentre lavora c'è CRI il criceto, un assistente offline a cui puoi fare domande sul programma: sa rispondere leggendo il manuale incluso e fa anche due chiacchiere. Se lo lasci stare per un po' si addormenta sulla ruota, e si sveglia appena gli scrivi. Il nome glielo puoi cambiare dalle impostazioni.
-
-Sopra a tutto trovi i tre interruttori rapidi: lingua (italiano o inglese, cambia tutti i testi e pure le risposte di CRI), tema (scuro o chiaro) e musica (accesa o muta). Dietro al log c'è un piccolo visualizzatore audio in stile vecchio lettore multimediale che reagisce alla musica di sottofondo.
-
-Dalle Impostazioni regoli la musica (file, volume, mute), il nome dell'assistente, gli effetti sonori in stile MSN (click, cambio scheda, invio, risposta), le animazioni, e trovi la sezione About con i link.
-
 ## Sottotitoli e GPU
 
 I sottotitoli sono generati in locale con Whisper, quindi non lasciano il PC. Puoi forzare la lingua (metti "it" o "en" così non sbaglia quando ci sono voci sovrapposte o musica) e scegliere il modello: più è grande più è preciso, ma è anche più lento e pesante.
@@ -67,6 +55,8 @@ I sottotitoli sono generati in locale con Whisper, quindi non lasciano il PC. Pu
 Se hai una scheda NVIDIA puoi attivare la GPU: la trascrizione diventa molto più veloce, soprattutto con i modelli grossi. Al primo utilizzo l'app scarica le librerie CUDA. Se non hai una NVIDIA o manca qualcosa, torna in automatico sulla CPU. La riga sotto la spunta ti dice quanta VRAM hai e quale modello conviene.
 
 ## La sezione YouTube
+
+<img width="100%" alt="gaming-hamster-3851315888" src="https://github.com/user-attachments/assets/29f3f6df-6163-49e0-8110-3a0dbf53d70b" />
 
 Questa parte serve a programmare la pubblicazione degli short che hai generato, un po' come fa Buffer o lo strumento di pianificazione di YouTube Studio. Definisci degli slot settimanali (giorno e ora), premi l'assegnazione automatica e DOPAMINIC mette ogni video nel primo slot libero, mostrandoti il calendario. Poi con il caricamento i video vengono messi su come privati con un orario di pubblicazione: ci pensa YouTube a renderli pubblici da solo all'ora dello slot, così non perdi la spinta dell'algoritmo che parte quando il video diventa pubblico.
 
