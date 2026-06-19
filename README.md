@@ -8,10 +8,10 @@ L'idea è semplice: i momenti che funzionano in un video di solito sono quelli i
 
 <table>
   <tr>
-    <td width="60%">
+    <td width="40%">
       Il criceto sulla destra si chiama CRI ed è un assistente locale che non usa GPU e nemmeno LLM, ha un albero di if ma risponderà a tutte le tue domande sul funzionamento del programma, è un criceto che <strong>sa il fatto suo</strong>. E' molto pigro e si stanca si mette a dormire.
     </td>
-    <td width="40%">
+    <td width="60%">
       <img width="100%" alt="Il criceto CRI" src="https://github.com/user-attachments/assets/5a476cfc-3f7a-4acc-8434-1a4ffe4544dd" />
     </td>
   </tr>
