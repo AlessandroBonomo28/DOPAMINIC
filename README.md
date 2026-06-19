@@ -1,12 +1,15 @@
 # DOPAMINIC
 
-<img width="1135" height="785" alt="Immagine 2026-06-19 233213" src="https://github.com/user-attachments/assets/54f2721f-9103-4da2-ad10-dbc0f868363c" />
+<img width="400" height="225" alt="2026-06-19 23-37-29" src="https://github.com/user-attachments/assets/5a476cfc-3f7a-4acc-8434-1a4ffe4544dd" />
 
 Prendi un video lungo e in pochi minuti ne tiri fuori una manciata di short verticali pronti da pubblicare, senza mandare niente in giro per internet e senza API a pagamento. Tutto gira sul tuo PC.
 
-<img width="220" height="220" alt="goofyahh-hamsters-2358667433" src="https://github.com/user-attachments/assets/947f09c8-8ce9-40d0-9cd3-8fe4d6a22d8b" />
-
 L'idea è semplice: i momenti che funzionano in un video di solito sono quelli in cui succede qualcosa, e quasi sempre dove succede qualcosa il volume sale. DOPAMINIC ascolta l'audio, trova i picchi, ritaglia le clip attorno a quei picchi e te le sforna già in 9:16, con watermark e sottotitoli se li vuoi. Niente account, niente cloud, niente chiavi da configurare per generare gli short.
+
+## CRI Il criceto chill
+CRI è un assistente locale che non usa GPU e nemmeno LLM, ha un albero di if ma risponderà a tutte le tue domande sul funzionamento del programma, è un criceto chill
+
+<img width="220" height="220" alt="goofyahh-hamsters-2358667433" src="https://github.com/user-attachments/assets/947f09c8-8ce9-40d0-9cd3-8fe4d6a22d8b" />
 
 ## Cosa fa, passo per passo
 
