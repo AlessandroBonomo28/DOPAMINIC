@@ -1,0 +1,27 @@
+# DOPAMINIC (100% locale) — Python 3.11
+#
+# DIPENDENZE CORE (sempre necessarie). L'installer le imbarca.
+moviepy==1.0.3
+numpy==2.2.1
+Pillow==9.5.0
+
+# Runtime di moviepy (incl. ffmpeg via imageio-ffmpeg: nessuna installazione esterna)
+imageio==2.36.1
+imageio-ffmpeg==0.5.1
+proglog==0.1.10
+decorator==4.4.2
+tqdm==4.67.1
+
+# Output colorato a console
+termcolor==2.4.0
+
+# Audio: musica di sottofondo (in loop di default) + effetti sonori
+pygame==2.6.1
+
+# ---------------------------------------------------------------------------
+# DIPENDENZE OPZIONALI (installate on-demand dall'app, NON nel pacchetto base):
+#   opencv-python    -> face-tracking nel crop verticale
+#   faster-whisper   -> sottotitoli locali
+# Per installarle a mano:
+#   pip install opencv-python faster-whisper
+# ---------------------------------------------------------------------------

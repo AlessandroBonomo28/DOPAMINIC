@@ -1,0 +1,36 @@
+__pycache__/
+*.pyc
+
+# Ambienti virtuali
+env/
+venv/
+.venv/
+
+# Config locale, segreti e credenziali
+.env
+settings.json
+client_secret*.json
+youtube_token.json
+token.json
+*.pickle
+
+# Stato locale generato a runtime
+youtube_schedule.json
+crash.log
+
+# Output e file temporanei
+output/
+temp/
+*.mp4
+*.srt
+*.mp3
+
+# Artefatti del build installer
+installer/stage/
+installer/Output/
+
+# Asset audio generati a runtime (rigenerati se mancanti)
+default_*.wav
+
+.DS_Store
+.history
