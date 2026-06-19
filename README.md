@@ -114,8 +114,6 @@ Scritto da goodman. Il software è libero da multinazionali cattive, dormi tranq
 
 <img width="220" height="224" alt="gotosleep" src="https://github.com/user-attachments/assets/00962d74-df09-41f2-be59-739acb386d08" />
 
-GitHub: https://github.com/AlessandroBonomo28/DOPAMINIC
-
-Se ti è utile e ti va di offrire un caffè: https://buymeacoffee.com/servizibon0
+Se ti è utile e vuoi supportartmi: https://buymeacoffee.com/servizibon0
 
 La musica di default è "Rolling Down The Street, In My Katamari".
