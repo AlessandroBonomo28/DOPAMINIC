@@ -1461,7 +1461,7 @@ class App:
 
         # --- About ---
         c = self._card("ABOUT")
-        tk.Label(c, text=self._L("Questo software è gratuito, approfittane.",
+        tk.Label(c, text=self._L("Questo software è libero da multinazionali",
                                  "This software is free to use, benefit from it."),
                  bg=CARD, fg=FG, font=F_LABEL, anchor="w").grid(row=0, column=0, sticky="w")
         tk.Label(c, text=self._L("Autore: goodman", "Author: goodman"),
