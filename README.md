@@ -6,9 +6,16 @@ Prendi un video lungo e in pochi minuti ne tiri fuori una manciata di short vert
 
 L'idea è semplice: i momenti che funzionano in un video di solito sono quelli in cui succede qualcosa, e quasi sempre dove succede qualcosa il volume sale. DOPAMINIC ascolta l'audio, trova i picchi, ritaglia le clip attorno a quei picchi e te le sforna già in 9:16, con watermark e sottotitoli se li vuoi. Niente account, niente cloud, niente chiavi da configurare per generare gli short.
 
-Il criceto sulla destra si chiama CRI ed è un assistente locale che non usa GPU e nemmeno LLM, ha un albero di if ma risponderà a tutte le tue domande sul funzionamento del programma, è un criceto che **sa il fatto suo**. E' molto pigro e si stanca si mette a dormire 
-
-<img width="100%"  alt="2026-06-19 23-37-29" src="https://github.com/user-attachments/assets/5a476cfc-3f7a-4acc-8434-1a4ffe4544dd" />
+<table>
+  <tr>
+    <td width="60%">
+      Il criceto sulla destra si chiama CRI ed è un assistente locale che non usa GPU e nemmeno LLM, ha un albero di if ma risponderà a tutte le tue domande sul funzionamento del programma, è un criceto che <strong>sa il fatto suo</strong>. E' molto pigro e si stanca si mette a dormire.
+    </td>
+    <td width="40%">
+      <img width="100%" alt="Il criceto CRI" src="https://github.com/user-attachments/assets/5a476cfc-3f7a-4acc-8434-1a4ffe4544dd" />
+    </td>
+  </tr>
+</table>
 
 ## Cosa fa, passo per passo
 
