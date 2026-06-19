@@ -56,7 +56,7 @@ Se hai una scheda NVIDIA puoi attivare la GPU: la trascrizione diventa molto pi√
 
 ## La sezione YouTube
 
-<img width="100%" alt="gaming-hamster-3851315888" src="https://github.com/user-attachments/assets/29f3f6df-6163-49e0-8110-3a0dbf53d70b" />
+<img width="165" height="221" alt="gaming-hamster-3851315888" src="https://github.com/user-attachments/assets/dcc0aba8-cd59-4439-b997-6ef0eef117f2" />
 
 Questa parte serve a programmare la pubblicazione degli short che hai generato, un po' come fa Buffer o lo strumento di pianificazione di YouTube Studio. Definisci degli slot settimanali (giorno e ora), premi l'assegnazione automatica e DOPAMINIC mette ogni video nel primo slot libero, mostrandoti il calendario. Poi con il caricamento i video vengono messi su come privati con un orario di pubblicazione: ci pensa YouTube a renderli pubblici da solo all'ora dello slot, cos√¨ non perdi la spinta dell'algoritmo che parte quando il video diventa pubblico.
 
