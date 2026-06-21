@@ -14,7 +14,7 @@ from tkinter import colorchooser, filedialog, messagebox, ttk
 from moviepy.editor import VideoFileClip
 
 from clipper import OUTPUT_DIR
-from clipper.pipeline import generate_shorts
+from clipper.pipeline import detect_clips, render_clips
 from clipper.settings import load_settings, save_settings
 
 # --- Temi: light (retro XP grigio) e dark ---
@@ -80,6 +80,8 @@ UI_TRANS = {
         "first use downloads the CUDA libraries (~1 GB). Otherwise uses the CPU.",
     "GENERA SHORT": "GENERATE SHORTS",
     "GENERAZIONE IN CORSO...": "GENERATING...",
+    "RILEVAMENTO...": "DETECTING...",
+    "Anteprima": "Preview",
     "Apri cartella output": "Open output folder",
     "Invia": "Send",
     "Pronto. Seleziona un video e premi GENERA.":
@@ -236,6 +238,7 @@ class App:
         self._lang = self.settings.get("language", "it")
         self.video_path = None
         self._busy = False
+        self._detection = None  # ultimo rilevamento (per l'anteprima): vedi _on_detected
         self._cancel_event = threading.Event()
         from clipper import deps
         self.gpu = deps.gpu_info()  # {"name","total_mb"} oppure None
@@ -557,6 +560,9 @@ class App:
             gen_row, "GENERA SHORT", self.start_generation, primary=True
         )
         self.generate_btn.pack(side="left", fill="x", expand=True)
+        self.preview_btn = self._btn(gen_row, "Anteprima", self._open_preview)
+        self.preview_btn.pack(side="left", padx=(6, 0))
+        self.preview_btn.config(state="disabled")  # si abilita dopo il rilevamento
         self.stop_btn = self._btn(gen_row, "STOP", self._stop_generation, primary=True)
         self.stop_btn.pack(side="left", padx=(6, 0))
         self.stop_btn.config(state="disabled")  # attivo solo durante la generazione
@@ -1109,6 +1115,9 @@ class App:
         self.video_path = path
         self.video_path_var.set(path)
         self.path_label.config(fg=FG)
+        # Nuovo video: il rilevamento precedente non vale piu'
+        self._detection = None
+        self.preview_btn.config(state="disabled")
 
     # ------------------------------------------------------------ generation
     def _collect_settings(self) -> dict:
@@ -1148,11 +1157,71 @@ class App:
 
         settings = self._collect_settings()
         self._cancel_event.clear()
-        self._set_busy(True)
-        thread = threading.Thread(
-            target=self._run, args=(self.video_path, n_clips, duration, settings), daemon=True
-        )
-        thread.start()
+        self._set_busy(True, phase="detect")
+        threading.Thread(
+            target=self._detect_thread,
+            args=(self.video_path, n_clips, duration, settings), daemon=True,
+        ).start()
+
+    def _detect_thread(self, path, n_clips, duration, settings):
+        try:
+            det = detect_clips(
+                path, n_clips, duration, settings,
+                progress_cb=lambda m: self.root.after(0, self.log, m),
+                bar_cb=lambda m: self.root.after(0, self.log_progress, m),
+            )
+            self.root.after(0, self._on_detected, path, det, settings, None)
+        except Exception as exc:  # noqa: BLE001
+            self.root.after(0, self._on_detected, path, None, settings, exc)
+
+    def _on_detected(self, path, det, settings, error):
+        self._set_busy(False)
+        if error is not None:
+            self.log(f"[ERRORE] {error}")
+            messagebox.showerror("Errore", str(error))
+            return
+        clips = det.get("clips") if det else []
+        if not clips:
+            self._detection = None
+            self.preview_btn.config(state="disabled")
+            messagebox.showwarning(
+                "Nessun highlight",
+                "Nessun momento rilevato (video troppo corto o senza parlato?).")
+            return
+        self._detection = {
+            "path": path, "clips": clips, "transcript": det.get("transcript"),
+            "duration": det.get("duration"), "settings": settings,
+        }
+        self.preview_btn.config(state="normal")
+        self.log(f"[+] {len(clips)} clip individuate. Apri l'Anteprima per rivederle e confermare.")
+        self._open_preview()
+
+    def _open_preview(self):
+        if self._busy:
+            return
+        d = self._detection
+        if not d:
+            messagebox.showinfo("Anteprima",
+                                "Prima premi GENERA SHORT per individuare i momenti.")
+            return
+        from clipper.preview import PreviewEditor
+        colors = {"BG": BG, "CARD": CARD, "FG": FG, "MUTED": MUTED, "ACCENT": ACCENT,
+                  "INPUT_BG": INPUT_BG, "SUCCESS_HOVER": SUCCESS_HOVER}
+        PreviewEditor(self.root, d["path"], d["clips"], d["duration"],
+                      on_confirm=self._confirm_render, colors=colors, title_font=F_SECTION,
+                      default_dur=d["settings"].get("clip_duration", 15))
+
+    def _confirm_render(self, clips):
+        d = self._detection
+        if not d:
+            return
+        d["clips"] = clips  # tieni le clip ritoccate per eventuali riaperture
+        self._cancel_event.clear()
+        self._set_busy(True, phase="render")
+        threading.Thread(
+            target=self._render_thread,
+            args=(d["path"], clips, d["settings"], d["transcript"]), daemon=True,
+        ).start()
 
     def _stop_generation(self):
         if self._busy:
@@ -1160,13 +1229,12 @@ class App:
             self.stop_btn.config(state="disabled")
             self.log("[!] Interruzione richiesta: mi fermo dopo lo short in corso...")
 
-    def _run(self, path, n_clips, duration, settings):
+    def _render_thread(self, path, clips, settings, transcript):
         try:
-            outputs = generate_shorts(
-                path, n_clips, duration, settings,
+            outputs = render_clips(
+                path, clips, settings, transcript,
                 progress_cb=lambda m: self.root.after(0, self.log, m),
                 should_cancel=self._cancel_event.is_set,
-                bar_cb=lambda m: self.root.after(0, self.log_progress, m),
             )
             self.root.after(0, self._on_done, outputs, None)
         except Exception as exc:  # noqa: BLE001
@@ -1185,13 +1253,20 @@ class App:
         else:
             messagebox.showwarning("Nessun output", "Nessuno short generato (video troppo corto?).")
 
-    def _set_busy(self, busy: bool):
+    def _set_busy(self, busy: bool, phase: str = "render"):
         self._busy = busy
-        self.generate_btn.config(
-            state="disabled" if busy else "normal",
-            text="GENERAZIONE IN CORSO..." if busy else "GENERA SHORT",
-        )
+        if busy:
+            txt = "RILEVAMENTO..." if phase == "detect" else "GENERAZIONE IN CORSO..."
+        else:
+            txt = "GENERA SHORT"
+        self.generate_btn.config(state="disabled" if busy else "normal", text=txt)
         self.stop_btn.config(state="normal" if busy else "disabled")
+        # Anteprima: spenta mentre lavora; riaccesa a fine se c'e' un rilevamento valido
+        if busy:
+            self.preview_btn.config(state="disabled")
+        else:
+            self.preview_btn.config(
+                state="normal" if getattr(self, "_detection", None) else "disabled")
         if busy:
             self.progress.start(12)
         else:

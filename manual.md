@@ -29,6 +29,19 @@ stesso video (stesso modello e lingua) non la rifaccio, e la riuso anche per i
 sottotitoli senza ri-trascrivere clip per clip. La modalita' talk e' piu' pesante: con
 video lunghi conviene la GPU. Nel log vedi una barra di avanzamento della trascrizione.
 
+## Anteprima e modifica delle clip
+Parole chiave: anteprima, preview, editor, modifica, ritoccare, timeline, conferma, annulla, testina, inizio, fine
+Dopo aver premuto GENERA SHORT individuo i momenti e apro una finestra di anteprima
+stile editor. Li' vedi i fotogrammi trascinando la testina sulla timeline (un tasto Play
+li scorre, senza audio), e per ogni clip puoi ritoccare inizio e fine: trascini le
+maniglie verde (inizio) e rossa (fine), oppure aggiusti coi tasti -30s/-1s/+1s/+30s quando
+col trascinamento non sei preciso. Puoi aggiungere una nuova clip alla testina con
+"Aggiungi clip" e togliere quella selezionata con "Rimuovi clip". Quando sei a posto premi
+"Conferma e genera" per produrre gli short, oppure "Annulla" per non generare niente. Il
+pulsante "Anteprima" riapre l'editor sull'ultimo rilevamento senza rifarlo. Se il video e'
+lungo e le clip si vedono piccole, usa lo zoom della timeline (tasti +/- o rotella del
+mouse) e la barra di scorrimento sotto per spostarti nel punto giusto.
+
 ## Numero di short e durata
 Parole chiave: numero, quanti, durata, secondi, lunghezza, clip
 "Numero di short" = quante clip estrarre. "Durata" = lunghezza di ognuna in secondi.

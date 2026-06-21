@@ -59,36 +59,29 @@ def _subtitle_generator(color: str, font_path: str = SUBTITLE_FONT,
     return generator
 
 
-def generate_shorts(
+def detect_clips(
     video_path: str,
     n_clips: int,
     clip_duration: int,
     settings: dict,
     progress_cb: Optional[ProgressCb] = None,
-    should_cancel: Optional[Callable[[], bool]] = None,
     bar_cb: Optional[ProgressCb] = None,
-) -> List[str]:
-    """Genera gli short a partire dal video lungo.
+) -> dict:
+    """Rileva gli intervalli da tagliare, SENZA generare gli short.
 
-    Args:
-        video_path: percorso del video lungo.
-        n_clips: numero di short desiderati.
-        clip_duration: durata di ogni short in secondi.
-        settings: dict di impostazioni (vedi clipper.settings.DEFAULTS).
-        progress_cb: callback opzionale per i messaggi di avanzamento (GUI).
+    Permette di mostrare un'anteprima/editor prima di produrre i file.
 
     Returns:
-        Lista dei percorsi degli short generati.
+        dict con:
+          - "clips": lista di (start, end) in secondi (ordine cronologico);
+          - "transcript": trascrizione completa (talk, o cache riusabile) o None;
+          - "duration": durata del video in secondi.
     """
     ensure_dirs()
 
-    use_face_tracking = settings.get("opencv_face_tracking", False)
     subtitles_enabled = settings.get("subtitles_enabled", False)
-    subtitles_color = settings.get("subtitles_color", "#FFFFFF")
-    watermark_enabled = settings.get("watermark", True)
-    watermark_text = settings.get("watermark_text", "@default")
 
-    # Durata del video (apri e chiudi subito: ogni short usa poi un reader nuovo)
+    # Durata del video (apri e chiudi subito).
     probe = VideoFileClip(video_path)
     length_seconds = probe.duration
     probe.close()
@@ -99,7 +92,7 @@ def generate_shorts(
         n_clips = int((length_seconds * 0.75) // clip_duration)
         if n_clips < 1:
             _log(progress_cb, "[!] Video troppo corto per estrarre clip.")
-            return []
+            return {"clips": [], "transcript": None, "duration": length_seconds}
         _log(progress_cb, f"[!] Video corto: adatto a {n_clips} clip da {clip_duration}s.")
 
     highlight_mode = settings.get("highlight_mode", "loudness")
@@ -107,9 +100,6 @@ def generate_shorts(
     language = settings.get("whisper_language", "it")
     device = settings.get("whisper_device", "cpu")
 
-    # Trascrizione completa: presente in modalita' talk, oppure in loudness se
-    # gia' in cache (cosi' i sottotitoli si ricavano affettandola, senza
-    # ri-trascrivere clip per clip).
     transcript = None
 
     if highlight_mode == "talk":
@@ -123,10 +113,9 @@ def generate_shorts(
         clips = find_monologue_clips(transcript, clip_duration, n_clips, length_seconds)
         if not clips:
             _log(progress_cb, "[!] Nessun parlato rilevato nel video.")
-            return []
-        if len(clips) < n_clips:
+        elif len(clips) < n_clips:
             _log(progress_cb, f"[!] Trovati solo {len(clips)} monologhi distinti (richiesti "
-                              f"{n_clips}): genero quelli disponibili.")
+                              f"{n_clips}): uso quelli disponibili.")
     else:
         _log(progress_cb, "[+] Analisi audio: ricerca dei momenti piu' rumorosi...")
         loudest = extract_loudest_segments(
@@ -135,12 +124,11 @@ def generate_shorts(
         starts = select_non_overlapping(loudest, n=n_clips, min_gap=clip_duration)
         if not starts:
             _log(progress_cb, "[!] Nessun highlight rilevato.")
-            return []
+            return {"clips": [], "transcript": None, "duration": length_seconds}
         if len(starts) < n_clips:
             _log(progress_cb, f"[!] Trovati solo {len(starts)} momenti distinti (richiesti "
-                              f"{n_clips}): genero quelli disponibili.")
+                              f"{n_clips}): uso quelli disponibili.")
         # Intervalli in ordine CRONOLOGICO (gli highlight arrivano per rumorosita').
-        # Evita seek all'indietro ripetuti nello stesso file.
         clips = []
         for peak in starts:
             start_time = max(0.0, peak - NEGATIVE_OFFSET)
@@ -154,7 +142,30 @@ def generate_shorts(
             if transcript is not None:
                 _log(progress_cb, "[+] Trascrizione completa in cache: la riuso per i sottotitoli.")
 
-    _log(progress_cb, f"[+] {len(clips)} clip selezionate. Genero gli short...")
+    return {"clips": clips, "transcript": transcript, "duration": length_seconds}
+
+
+def render_clips(
+    video_path: str,
+    clips: List,
+    settings: dict,
+    transcript: Optional[dict] = None,
+    progress_cb: Optional[ProgressCb] = None,
+    should_cancel: Optional[Callable[[], bool]] = None,
+) -> List[str]:
+    """Genera gli short dagli intervalli `clips` (eventualmente ritoccati nell'editor)."""
+    ensure_dirs()
+    if not clips:
+        return []
+
+    use_face_tracking = settings.get("opencv_face_tracking", False)
+    subtitles_enabled = settings.get("subtitles_enabled", False)
+    subtitles_color = settings.get("subtitles_color", "#FFFFFF")
+    watermark_enabled = settings.get("watermark", True)
+    watermark_text = settings.get("watermark_text", "@default")
+
+    clips = sorted(clips)
+    _log(progress_cb, f"[+] {len(clips)} clip da generare. Genero gli short...")
 
     # Transcriber per-clip: serve solo se i sottotitoli sono attivi e NON ho gia'
     # la trascrizione completa. Caricato UNA sola volta e riusato (ricaricarlo a
@@ -162,7 +173,11 @@ def generate_shorts(
     transcriber = None
     if subtitles_enabled and transcript is None:
         from .subtitles import WhisperTranscriber
-        transcriber = WhisperTranscriber(model_size=model, language=language, device=device)
+        transcriber = WhisperTranscriber(
+            model_size=settings.get("whisper_model", "base"),
+            language=settings.get("whisper_language", "it"),
+            device=settings.get("whisper_device", "cpu"),
+        )
 
     outputs: List[str] = []
     for i, (start_time, end_time) in enumerate(clips, start=1):
@@ -193,6 +208,22 @@ def generate_shorts(
 
     _log(progress_cb, f"[OK] Generati {len(outputs)} short in {OUTPUT_DIR}")
     return outputs
+
+
+def generate_shorts(
+    video_path: str,
+    n_clips: int,
+    clip_duration: int,
+    settings: dict,
+    progress_cb: Optional[ProgressCb] = None,
+    should_cancel: Optional[Callable[[], bool]] = None,
+    bar_cb: Optional[ProgressCb] = None,
+) -> List[str]:
+    """Rileva gli highlight e genera subito gli short (rilevamento + generazione)."""
+    det = detect_clips(video_path, n_clips, clip_duration, settings, progress_cb, bar_cb)
+    return render_clips(
+        video_path, det["clips"], settings, det["transcript"], progress_cb, should_cancel
+    )
 
 
 def _render_short(

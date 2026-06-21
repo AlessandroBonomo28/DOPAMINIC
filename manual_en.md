@@ -29,6 +29,19 @@ moments you speak. The full transcription is cached: if you run again on the sam
 re-transcribing each clip. Talk mode is heavier: on long videos a GPU helps a lot. The
 log shows a progress bar for the transcription.
 
+## Preview and edit the clips
+Keywords: preview, editor, edit, tweak, timeline, confirm, cancel, playhead, start, end
+After you press GENERATE SHORTS I detect the moments and open a preview window in
+editor style. There you see the frames by dragging the playhead on the timeline (a Play
+button scrubs through them, no audio), and for each clip you can tweak start and end:
+drag the green (start) and red (end) handles, or adjust with the -30s/-1s/+1s/+30s buttons
+when dragging isn't precise enough. You can add a new clip at the playhead with "Add clip"
+and remove the selected one with "Remove clip". When happy press "Confirm and generate" to
+produce the shorts, or "Cancel" to generate nothing. The "Preview" button reopens the
+editor on the last detection without redoing it. If the video is long and the clips look
+tiny, use the timeline zoom (+/- buttons or mouse wheel) and the scrollbar below to move to
+the right spot.
+
 ## Number of shorts and duration
 Keywords: number, how many, duration, seconds, length, clip
 "Number of shorts" = how many clips to extract. "Duration" = length of each in seconds.
