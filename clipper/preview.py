@@ -25,6 +25,7 @@ _HANDLE_END = "#ff3b30"
 _PLAYHEAD = "#ffd60a"
 _MIN_DUR = 1.0          # durata minima di una clip (s)
 _PREVIEW_W = 620        # larghezza max del fotogramma di anteprima
+_PLAY_CHUNK = 60.0      # quanti secondi riprodurre quando la testina e' fuori da uno short
 
 
 def _fmt(t: float) -> str:
@@ -54,6 +55,9 @@ class PreviewEditor:
         self._audio_playing = False
         self._audio_base = 0.0      # tempo del video corrispondente all'inizio del segmento
         self._used_audio = False    # se abbiamo dirottato lo stream musica (da ripristinare)
+        self._seg_counter = 0       # nome file univoco per ogni segmento (evita file lock)
+        self._seg_path = None       # ultimo WAV di segmento scritto (da rimuovere)
+        self._play_end = 0.0        # tempo a cui fermare la riproduzione corrente
         self.col = dict(DEFAULT_COLORS)
         if colors:
             self.col.update({k: v for k, v in colors.items() if v})
@@ -198,6 +202,7 @@ class PreviewEditor:
         self.tl.pack(fill="x", padx=10, pady=(2, 0))
         self.tl.bind("<Configure>", lambda e: self._draw_timeline())
         self.tl.bind("<Button-1>", self._on_press)
+        self.tl.bind("<Double-Button-1>", self._on_double)  # doppio click su uno short = vai al 1o frame
         self.tl.bind("<B1-Motion>", self._on_drag)
         self.tl.bind("<ButtonRelease-1>", self._on_release)
         self.tl.bind("<MouseWheel>", self._on_wheel)        # rotella = zoom centrato sul cursore
@@ -510,19 +515,35 @@ class PreviewEditor:
     def _on_release(self, _ev):
         self.grab = None
 
+    def _on_double(self, ev):
+        """Doppio click su uno short: selezionalo e porta la testina al suo primo frame."""
+        self.grab = None
+        t = self._x_to_t(ev.x)
+        for i, (s, e) in enumerate(self.clips):
+            if s <= t <= e:
+                self._select(i)   # _select porta la testina all'inizio e mostra il frame
+                return
+
     # ------------------------------------------------------------------ playback
     def _toggle_play(self):
         if self._playing:
             self._stop_play()
             return
-        if not (0 <= self.sel < len(self.clips)):
+        # Riproduce DALLA testina dovunque sia (niente seek forzato dentro lo short).
+        start = max(0.0, min(self.playhead, self.dur - 1.0 / self.fps))
+        self.playhead = start
+        # Se la testina e' dentro lo short selezionato -> riproduci fino alla sua fine;
+        # altrimenti riproduci un blocco libero (free roam) dalla testina.
+        self._play_end = min(self.dur, start + _PLAY_CHUNK)
+        if 0 <= self.sel < len(self.clips):
+            s, e = self.clips[self.sel]
+            if s <= start < e:
+                self._play_end = e
+        if self._play_end - start < 0.1:
             return
-        s, e = self.clips[self.sel]
-        if not (s <= self.playhead < e):
-            self.playhead = s
         self._playing = True
         self.play_btn.config(text=self._L("Pausa", "Pause"))
-        self._start_audio(self.playhead)   # riproduce anche l'audio (se disponibile)
+        self._start_audio(start)           # riproduce anche l'audio (se disponibile)
         self._play_step()
 
     def _stop_play(self):
@@ -532,19 +553,21 @@ class PreviewEditor:
         self._stop_audio()
 
     def _start_audio(self, t):
-        """Estrae il segmento [t, fine clip] in un WAV e lo riproduce con pygame."""
-        if not (0 <= self.sel < len(self.clips)):
-            return
-        _s, e = self.clips[self.sel]
-        if self.clip.audio is None or t >= e - 0.05:
+        """Estrae il segmento [t, _play_end] in un WAV e lo riproduce con pygame."""
+        if self.clip.audio is None or t >= self._play_end - 0.05:
             self._audio_playing = False
             return
+        # Ferma e RILASCIA l'eventuale segmento precedente: senza unload pygame
+        # tiene il file aperto e la nuova scrittura fallirebbe (audio stantio).
+        self._stop_audio()
+        prev_seg = self._seg_path
         try:
             from . import TEMP_DIR
             import pygame
             TEMP_DIR.mkdir(parents=True, exist_ok=True)
-            seg = str(TEMP_DIR / "preview_seg.wav")
-            self.clip.audio.subclip(t, min(e, self.dur)).write_audiofile(
+            self._seg_counter += 1
+            seg = str(TEMP_DIR / f"preview_seg_{self._seg_counter}.wav")
+            self.clip.audio.subclip(t, min(self._play_end, self.dur)).write_audiofile(
                 seg, fps=44100, nbytes=2, logger=None)
             if self.music_pause:           # ferma la musica di sottofondo dell'app
                 self.music_pause()
@@ -556,6 +579,8 @@ class PreviewEditor:
             pygame.mixer.music.play()       # il segmento parte gia' da t
             self._audio_base = t
             self._audio_playing = True
+            self._seg_path = seg
+            self._remove_seg(prev_seg)      # libera il file del segmento precedente
         except Exception:
             self._audio_playing = False     # niente audio: si scorre solo i frame
 
@@ -564,14 +589,26 @@ class PreviewEditor:
         try:
             import pygame
             pygame.mixer.music.stop()
+            try:
+                pygame.mixer.music.unload()   # rilascia il file (pygame >= 2.0)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def _remove_seg(self, path):
+        if not path:
+            return
+        try:
+            import os
+            os.remove(path)
         except Exception:
             pass
 
     def _play_step(self):
-        if not self._playing or not (0 <= self.sel < len(self.clips)):
-            self._playing = False
+        if not self._playing:
             return
-        _s, e = self.clips[self.sel]
+        end = self._play_end
         if self._audio_playing:
             # l'audio fa da metronomo: la posizione la dà get_pos (ms dall'avvio)
             try:
@@ -579,11 +616,11 @@ class PreviewEditor:
                 pos = pygame.mixer.music.get_pos()
             except Exception:
                 pos = -1
-            self.playhead = e if pos < 0 else self._audio_base + pos / 1000.0
+            self.playhead = end if pos < 0 else self._audio_base + pos / 1000.0
         else:
             self.playhead += 0.08
-        if self.playhead >= e:
-            self.playhead = e
+        if self.playhead >= end:
+            self.playhead = end
             self._stop_play()
             self._request_frame(self.playhead)
             self._ensure_visible(self.playhead)
@@ -598,6 +635,8 @@ class PreviewEditor:
     def _cleanup(self):
         self._playing = False
         self._stop_audio()
+        self._remove_seg(self._seg_path)   # rimuovi l'ultimo WAV di segmento
+        self._seg_path = None
         # Ripristina la musica di sottofondo se l'avevamo interrotta per l'anteprima.
         if self._used_audio and self.music_resume:
             try:
