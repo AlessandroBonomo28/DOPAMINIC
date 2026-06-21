@@ -33,7 +33,7 @@ video lunghi conviene la GPU. Nel log vedi una barra di avanzamento della trascr
 Parole chiave: anteprima, preview, editor, modifica, ritoccare, timeline, conferma, annulla, testina, inizio, fine
 Dopo aver premuto GENERA SHORT individuo i momenti e apro una finestra di anteprima
 stile editor. Li' vedi i fotogrammi trascinando la testina sulla timeline (un tasto Play
-li scorre, senza audio), e per ogni clip puoi ritoccare inizio e fine: trascini le
+li riproduce con l'audio della clip), e per ogni clip puoi ritoccare inizio e fine: trascini le
 maniglie verde (inizio) e rossa (fine), oppure aggiusti coi tasti -30s/-1s/+1s/+30s quando
 col trascinamento non sei preciso. Puoi aggiungere una nuova clip alla testina con
 "Aggiungi clip" e togliere quella selezionata con "Rimuovi clip". Quando sei a posto premi

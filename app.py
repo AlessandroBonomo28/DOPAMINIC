@@ -1209,7 +1209,14 @@ class App:
                   "INPUT_BG": INPUT_BG, "SUCCESS_HOVER": SUCCESS_HOVER}
         PreviewEditor(self.root, d["path"], d["clips"], d["duration"],
                       on_confirm=self._confirm_render, colors=colors, title_font=F_SECTION,
-                      default_dur=d["settings"].get("clip_duration", 15))
+                      default_dur=d["settings"].get("clip_duration", 15),
+                      music_pause=self.music.stop, music_resume=self._resume_music_if_on,
+                      lang=self._lang)
+
+    def _resume_music_if_on(self):
+        """Riprende la musica di sottofondo (usato quando l'anteprima la rilascia)."""
+        if self.settings.get("music_enabled"):
+            self._start_music()
 
     def _confirm_render(self, clips):
         d = self._detection

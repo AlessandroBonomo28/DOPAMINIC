@@ -38,13 +38,22 @@ class PreviewEditor:
     """Finestra modale di anteprima/modifica. Chiama `on_confirm(clips)` su Conferma."""
 
     def __init__(self, parent, video_path, clips, duration, on_confirm,
-                 colors=None, title_font=("Tahoma", 11, "bold"), default_dur=15.0):
+                 colors=None, title_font=("Tahoma", 11, "bold"), default_dur=15.0,
+                 music_pause=None, music_resume=None, lang="it"):
         self.parent = parent
+        self.lang = lang
         self.video_path = video_path
         self.clips = [(float(s), float(e)) for s, e in clips]
         self.dur = float(duration)
         self.on_confirm = on_confirm
         self.default_dur = max(_MIN_DUR, float(default_dur))
+        # Audio in anteprima: callback per mettere in pausa/riprendere la musica
+        # di sottofondo dell'app (condividono lo stesso stream di pygame).
+        self.music_pause = music_pause
+        self.music_resume = music_resume
+        self._audio_playing = False
+        self._audio_base = 0.0      # tempo del video corrispondente all'inizio del segmento
+        self._used_audio = False    # se abbiamo dirottato lo stream musica (da ripristinare)
         self.col = dict(DEFAULT_COLORS)
         if colors:
             self.col.update({k: v for k, v in colors.items() if v})
@@ -81,11 +90,16 @@ class PreviewEditor:
             self._update_labels()
             self._draw_timeline()
 
+    def _L(self, it, en):
+        """Ritorna la stringa nella lingua dell'editor (it/en)."""
+        return en if self.lang == "en" else it
+
     # ------------------------------------------------------------------ UI
     def _build_ui(self):
         col = self.col
         self.win = tk.Toplevel(self.parent)
-        self.win.title("Anteprima e modifica clip - DOPAMINIC")
+        self.win.title(self._L("Anteprima e modifica clip - DOPAMINIC",
+                               "Preview and edit clips - DOPAMINIC"))
         self.win.configure(bg=col["BG"])
         self.win.geometry("980x880")
         self.win.minsize(840, 760)
@@ -108,8 +122,10 @@ class PreviewEditor:
         )
         self.listbox.pack(fill="y", expand=True)
         self.listbox.bind("<<ListboxSelect>>", self._on_list_select)
-        self._btn(left, "+ Aggiungi clip (alla testina)", self._add_clip).pack(fill="x", pady=(8, 0))
-        self._btn(left, "Rimuovi clip selezionata", self._remove).pack(fill="x", pady=(4, 0))
+        self._btn(left, self._L("+ Aggiungi clip (alla testina)", "+ Add clip (at playhead)"),
+                  self._add_clip).pack(fill="x", pady=(8, 0))
+        self._btn(left, self._L("Rimuovi clip selezionata", "Remove selected clip"),
+                  self._remove).pack(fill="x", pady=(4, 0))
 
         right = tk.Frame(top, bg=col["BG"])
         right.pack(side="left", fill="both", expand=True)
@@ -124,19 +140,23 @@ class PreviewEditor:
         # --- istruzioni + regolazione fine della clip selezionata ---
         info = tk.Frame(self.win, bg=col["BG"])
         info.pack(fill="x", padx=10, pady=(2, 0))
-        tk.Label(info, text="Trascina le maniglie sulla timeline qui sotto:  "
-                            "VERDE = inizio,  ROSSA = fine.",
+        tk.Label(info, text=self._L("Trascina le maniglie sulla timeline qui sotto:  "
+                                    "VERDE = inizio,  ROSSA = fine.",
+                                    "Drag the handles on the timeline below:  "
+                                    "GREEN = start,  RED = end."),
                  bg=col["BG"], fg=col["FG"], font=("Tahoma", 9, "bold"),
                  anchor="w").pack(anchor="w")
-        tk.Label(info, text="Se col trascinamento non sei preciso, aggiusta la clip "
-                            "selezionata con i tasti:",
+        tk.Label(info, text=self._L("Se col trascinamento non sei preciso, aggiusta la clip "
+                                    "selezionata con i tasti:",
+                                    "If dragging isn't precise, fine-tune the selected clip "
+                                    "with the buttons:"),
                  bg=col["BG"], fg=col["MUTED"], font=("Tahoma", 9), anchor="w").pack(anchor="w")
 
         edit = tk.Frame(self.win, bg=col["BG"])
         edit.pack(fill="x", padx=10, pady=(4, 6))
         edit.columnconfigure(6, weight=1)
         # Riga INIZIO: pallino verde + valore + tasti -30/-1/+1/+30
-        tk.Label(edit, text="● Inizio", bg=col["BG"], fg=_HANDLE_START,
+        tk.Label(edit, text=self._L("● Inizio", "● Start"), bg=col["BG"], fg=_HANDLE_START,
                  font=("Tahoma", 10, "bold"), width=9, anchor="w").grid(row=0, column=0, sticky="w")
         self.start_val = tk.Label(edit, text="--:--", bg=col["BG"], fg=col["FG"],
                                   font=("Consolas", 11, "bold"), width=8, anchor="w")
@@ -146,7 +166,7 @@ class PreviewEditor:
         self._btn(edit, "+1s", lambda: self._nudge("start", 1)).grid(row=0, column=4, padx=2)
         self._btn(edit, "+30s", lambda: self._nudge("start", 30)).grid(row=0, column=5, padx=2)
         # Riga FINE: pallino rosso + valore + tasti
-        tk.Label(edit, text="● Fine", bg=col["BG"], fg=_HANDLE_END,
+        tk.Label(edit, text=self._L("● Fine", "● End"), bg=col["BG"], fg=_HANDLE_END,
                  font=("Tahoma", 10, "bold"), width=9, anchor="w").grid(row=1, column=0, sticky="w", pady=(5, 0))
         self.end_val = tk.Label(edit, text="--:--", bg=col["BG"], fg=col["FG"],
                                 font=("Consolas", 11, "bold"), width=8, anchor="w")
@@ -162,11 +182,11 @@ class PreviewEditor:
         # --- controlli zoom timeline ---
         zrow = tk.Frame(self.win, bg=col["BG"])
         zrow.pack(fill="x", padx=10, pady=(6, 0))
-        tk.Label(zrow, text="Zoom timeline:", bg=col["BG"], fg=col["FG"],
-                 font=("Tahoma", 9, "bold")).pack(side="left")
+        tk.Label(zrow, text=self._L("Zoom timeline:", "Timeline zoom:"), bg=col["BG"],
+                 fg=col["FG"], font=("Tahoma", 9, "bold")).pack(side="left")
         self._btn(zrow, "  -  ", lambda: self._set_zoom(self.zoom / 1.5)).pack(side="left", padx=(6, 2))
         self._btn(zrow, "  +  ", lambda: self._set_zoom(self.zoom * 1.5)).pack(side="left", padx=2)
-        self._btn(zrow, "Tutto", lambda: self._set_zoom(1.0)).pack(side="left", padx=(2, 8))
+        self._btn(zrow, self._L("Tutto", "All"), lambda: self._set_zoom(1.0)).pack(side="left", padx=(2, 8))
         self.zoom_lbl = tk.Label(zrow, text="", bg=col["BG"], fg=col["MUTED"], font=("Tahoma", 8))
         self.zoom_lbl.pack(side="left")
 
@@ -186,20 +206,24 @@ class PreviewEditor:
                                  bg=col["SUCCESS_HOVER"], troughcolor=col["INPUT_BG"],
                                  activebackground=col["ACCENT"], bd=0, highlightthickness=0)
         self.hbar.pack(fill="x", padx=10, pady=(0, 2))
-        tk.Label(self.win, text="Clicca sulla barra per spostare la testina (gialla). Rotella o "
-                                "tasti +/- per zoomare, trascina la barra sotto per scorrere.",
+        tk.Label(self.win, text=self._L(
+                     "Clicca sulla barra per spostare la testina (gialla). Rotella o "
+                     "tasti +/- per zoomare, trascina la barra sotto per scorrere.",
+                     "Click the bar to move the playhead (yellow). Wheel or +/- buttons "
+                     "to zoom, drag the bar below to scroll."),
                  bg=col["BG"], fg=col["MUTED"], font=("Tahoma", 8)).pack(anchor="w", padx=12)
 
         # --- controlli play + conferma/annulla ---
         bar = tk.Frame(self.win, bg=col["BG"])
         bar.pack(fill="x", padx=10, pady=(6, 10))
-        self._btn(bar, "|< Prec", lambda: self._step_sel(-1)).pack(side="left")
+        self._btn(bar, self._L("|< Prec", "|< Prev"), lambda: self._step_sel(-1)).pack(side="left")
         self.play_btn = self._btn(bar, "Play", self._toggle_play)
         self.play_btn.pack(side="left", padx=4)
-        self._btn(bar, "Succ >|", lambda: self._step_sel(1)).pack(side="left")
-        self.confirm_btn = self._btn(bar, "Conferma e genera", self._confirm, primary=True)
+        self._btn(bar, self._L("Succ >|", "Next >|"), lambda: self._step_sel(1)).pack(side="left")
+        self.confirm_btn = self._btn(bar, self._L("Conferma e genera", "Confirm and generate"),
+                                     self._confirm, primary=True)
         self.confirm_btn.pack(side="right")
-        self._btn(bar, "Annulla", self._cancel).pack(side="right", padx=(0, 6))
+        self._btn(bar, self._L("Annulla", "Cancel"), self._cancel).pack(side="right", padx=(0, 6))
 
         self.win.update_idletasks()
         self.tl_w = self.tl.winfo_width() or 800
@@ -318,8 +342,9 @@ class PreviewEditor:
         c.create_text(W - m, H - 8, text=_fmt(ve), anchor="e",
                       fill=self.col["MUTED"], font=("Tahoma", 7))
         if hasattr(self, "zoom_lbl"):
-            self.zoom_lbl.config(
-                text=f"finestra visibile {_fmt(self._visible_dur())}  (zoom {self.zoom:.1f}x)")
+            self.zoom_lbl.config(text=self._L(
+                f"finestra visibile {_fmt(self._visible_dur())}  (zoom {self.zoom:.1f}x)",
+                f"visible window {_fmt(self._visible_dur())}  (zoom {self.zoom:.1f}x)"))
         self._sync_scroll()
 
     def _request_frame(self, t):
@@ -364,6 +389,7 @@ class PreviewEditor:
     def _select(self, i):
         if not (0 <= i < len(self.clips)):
             return
+        self._stop_play()   # cambiare clip ferma la riproduzione (evita desync audio)
         self.sel = i
         s, _e = self.clips[i]
         self.playhead = s
@@ -383,16 +409,19 @@ class PreviewEditor:
             s, e = self.clips[self.sel]
             self.start_val.config(text=_fmt(s))
             self.end_val.config(text=_fmt(e))
-            self.dur_lbl.config(text=f"Clip {self.sel + 1}/{len(self.clips)}  -  durata {e - s:.1f}s")
+            self.dur_lbl.config(text=self._L(
+                f"Clip {self.sel + 1}/{len(self.clips)}  -  durata {e - s:.1f}s",
+                f"Clip {self.sel + 1}/{len(self.clips)}  -  length {e - s:.1f}s"))
         else:
             self.start_val.config(text="--:--")
             self.end_val.config(text="--:--")
-            self.dur_lbl.config(text="Nessuna clip")
+            self.dur_lbl.config(text=self._L("Nessuna clip", "No clip"))
 
     # ------------------------------------------------------------------ modifiche
     def _nudge(self, edge, delta):
         if not (0 <= self.sel < len(self.clips)):
             return
+        self._stop_play()
         s, e = self.clips[self.sel]
         if edge == "start":
             s = max(0.0, min(s + delta, e - _MIN_DUR))
@@ -442,6 +471,7 @@ class PreviewEditor:
 
     # ------------------------------------------------------------------ mouse timeline
     def _on_press(self, ev):
+        self._stop_play()   # interagire con la timeline ferma la riproduzione
         t = self._x_to_t(ev.x)
         self.grab = None
         if 0 <= self.sel < len(self.clips):
@@ -483,8 +513,7 @@ class PreviewEditor:
     # ------------------------------------------------------------------ playback
     def _toggle_play(self):
         if self._playing:
-            self._playing = False
-            self.play_btn.config(text="Play")
+            self._stop_play()
             return
         if not (0 <= self.sel < len(self.clips)):
             return
@@ -492,30 +521,89 @@ class PreviewEditor:
         if not (s <= self.playhead < e):
             self.playhead = s
         self._playing = True
-        self.play_btn.config(text="Pausa")
+        self.play_btn.config(text=self._L("Pausa", "Pause"))
+        self._start_audio(self.playhead)   # riproduce anche l'audio (se disponibile)
         self._play_step()
+
+    def _stop_play(self):
+        if self._playing:
+            self._playing = False
+            self.play_btn.config(text="Play")
+        self._stop_audio()
+
+    def _start_audio(self, t):
+        """Estrae il segmento [t, fine clip] in un WAV e lo riproduce con pygame."""
+        if not (0 <= self.sel < len(self.clips)):
+            return
+        _s, e = self.clips[self.sel]
+        if self.clip.audio is None or t >= e - 0.05:
+            self._audio_playing = False
+            return
+        try:
+            from . import TEMP_DIR
+            import pygame
+            TEMP_DIR.mkdir(parents=True, exist_ok=True)
+            seg = str(TEMP_DIR / "preview_seg.wav")
+            self.clip.audio.subclip(t, min(e, self.dur)).write_audiofile(
+                seg, fps=44100, nbytes=2, logger=None)
+            if self.music_pause:           # ferma la musica di sottofondo dell'app
+                self.music_pause()
+            self._used_audio = True
+            if not pygame.mixer.get_init():
+                pygame.mixer.init()
+            pygame.mixer.music.load(seg)
+            pygame.mixer.music.set_volume(1.0)
+            pygame.mixer.music.play()       # il segmento parte gia' da t
+            self._audio_base = t
+            self._audio_playing = True
+        except Exception:
+            self._audio_playing = False     # niente audio: si scorre solo i frame
+
+    def _stop_audio(self):
+        self._audio_playing = False
+        try:
+            import pygame
+            pygame.mixer.music.stop()
+        except Exception:
+            pass
 
     def _play_step(self):
         if not self._playing or not (0 <= self.sel < len(self.clips)):
             self._playing = False
             return
         _s, e = self.clips[self.sel]
-        self.playhead += 0.08
+        if self._audio_playing:
+            # l'audio fa da metronomo: la posizione la dà get_pos (ms dall'avvio)
+            try:
+                import pygame
+                pos = pygame.mixer.music.get_pos()
+            except Exception:
+                pos = -1
+            self.playhead = e if pos < 0 else self._audio_base + pos / 1000.0
+        else:
+            self.playhead += 0.08
         if self.playhead >= e:
             self.playhead = e
-            self._playing = False
-            self.play_btn.config(text="Play")
+            self._stop_play()
             self._request_frame(self.playhead)
+            self._ensure_visible(self.playhead)
             self._draw_timeline()
             return
         self._request_frame(self.playhead)
         self._ensure_visible(self.playhead)
         self._draw_timeline()
-        self.win.after(80, self._play_step)
+        self.win.after(40, self._play_step)
 
     # ------------------------------------------------------------------ chiusura
     def _cleanup(self):
         self._playing = False
+        self._stop_audio()
+        # Ripristina la musica di sottofondo se l'avevamo interrotta per l'anteprima.
+        if self._used_audio and self.music_resume:
+            try:
+                self.music_resume()
+            except Exception:
+                pass
         try:
             self.clip.close()
         except Exception:

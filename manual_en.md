@@ -33,7 +33,7 @@ log shows a progress bar for the transcription.
 Keywords: preview, editor, edit, tweak, timeline, confirm, cancel, playhead, start, end
 After you press GENERATE SHORTS I detect the moments and open a preview window in
 editor style. There you see the frames by dragging the playhead on the timeline (a Play
-button scrubs through them, no audio), and for each clip you can tweak start and end:
+button plays them with the clip's audio), and for each clip you can tweak start and end:
 drag the green (start) and red (end) handles, or adjust with the -30s/-1s/+1s/+30s buttons
 when dragging isn't precise enough. You can add a new clip at the playhead with "Add clip"
 and remove the selected one with "Remove clip". When happy press "Confirm and generate" to
