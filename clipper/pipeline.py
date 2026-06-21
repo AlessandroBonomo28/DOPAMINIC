@@ -66,6 +66,7 @@ def generate_shorts(
     settings: dict,
     progress_cb: Optional[ProgressCb] = None,
     should_cancel: Optional[Callable[[], bool]] = None,
+    bar_cb: Optional[ProgressCb] = None,
 ) -> List[str]:
     """Genera gli short a partire dal video lungo.
 
@@ -101,39 +102,67 @@ def generate_shorts(
             return []
         _log(progress_cb, f"[!] Video corto: adatto a {n_clips} clip da {clip_duration}s.")
 
-    _log(progress_cb, "[+] Analisi audio: ricerca dei momenti piu' rumorosi...")
-    loudest = extract_loudest_segments(
-        video_path, segment_duration=SEGMENT_DURATION, top_n=n_clips * 4
-    )
-    starts = select_non_overlapping(loudest, n=n_clips, min_gap=clip_duration)
-    if not starts:
-        _log(progress_cb, "[!] Nessun highlight rilevato.")
-        return []
-    if len(starts) < n_clips:
-        _log(progress_cb, f"[!] Trovati solo {len(starts)} momenti distinti (richiesti {n_clips}): "
-                          "genero quelli disponibili.")
+    highlight_mode = settings.get("highlight_mode", "loudness")
+    model = settings.get("whisper_model", "base")
+    language = settings.get("whisper_language", "it")
+    device = settings.get("whisper_device", "cpu")
 
-    # Intervalli in ordine CRONOLOGICO (gli highlight arrivano per rumorosita').
-    # Evita seek all'indietro ripetuti nello stesso file.
-    clips = []
-    for peak in starts:
-        start_time = max(0.0, peak - NEGATIVE_OFFSET)
-        end_time = min(start_time + clip_duration, length_seconds)
-        clips.append((start_time, end_time))
-    clips.sort()
+    # Trascrizione completa: presente in modalita' talk, oppure in loudness se
+    # gia' in cache (cosi' i sottotitoli si ricavano affettandola, senza
+    # ri-trascrivere clip per clip).
+    transcript = None
 
-    _log(progress_cb, f"[+] {len(clips)} highlight selezionati. Genero gli short...")
+    if highlight_mode == "talk":
+        from .transcript import get_full_transcript, find_monologue_clips
 
-    # Transcriber Whisper: caricato UNA sola volta e riusato per tutte le clip
-    # (ricaricarlo a ogni clip causava blocchi, specie su GPU).
-    transcriber = None
-    if subtitles_enabled:
-        from .subtitles import WhisperTranscriber
-        transcriber = WhisperTranscriber(
-            model_size=settings.get("whisper_model", "base"),
-            language=settings.get("whisper_language", "it"),
-            device=settings.get("whisper_device", "cpu"),
+        _log(progress_cb, "[+] Modalita' 'by talk': cerco i monologhi piu' lunghi.")
+        transcript = get_full_transcript(
+            video_path, model, language, device,
+            bar_cb=bar_cb, log_cb=lambda m: _log(progress_cb, m),
         )
+        clips = find_monologue_clips(transcript, clip_duration, n_clips, length_seconds)
+        if not clips:
+            _log(progress_cb, "[!] Nessun parlato rilevato nel video.")
+            return []
+        if len(clips) < n_clips:
+            _log(progress_cb, f"[!] Trovati solo {len(clips)} monologhi distinti (richiesti "
+                              f"{n_clips}): genero quelli disponibili.")
+    else:
+        _log(progress_cb, "[+] Analisi audio: ricerca dei momenti piu' rumorosi...")
+        loudest = extract_loudest_segments(
+            video_path, segment_duration=SEGMENT_DURATION, top_n=n_clips * 4
+        )
+        starts = select_non_overlapping(loudest, n=n_clips, min_gap=clip_duration)
+        if not starts:
+            _log(progress_cb, "[!] Nessun highlight rilevato.")
+            return []
+        if len(starts) < n_clips:
+            _log(progress_cb, f"[!] Trovati solo {len(starts)} momenti distinti (richiesti "
+                              f"{n_clips}): genero quelli disponibili.")
+        # Intervalli in ordine CRONOLOGICO (gli highlight arrivano per rumorosita').
+        # Evita seek all'indietro ripetuti nello stesso file.
+        clips = []
+        for peak in starts:
+            start_time = max(0.0, peak - NEGATIVE_OFFSET)
+            end_time = min(start_time + clip_duration, length_seconds)
+            clips.append((start_time, end_time))
+        clips.sort()
+        # Riusa la trascrizione completa per i sottotitoli SOLO se gia' in cache.
+        if subtitles_enabled:
+            from .transcript import load_cached
+            transcript = load_cached(video_path, model, language)
+            if transcript is not None:
+                _log(progress_cb, "[+] Trascrizione completa in cache: la riuso per i sottotitoli.")
+
+    _log(progress_cb, f"[+] {len(clips)} clip selezionate. Genero gli short...")
+
+    # Transcriber per-clip: serve solo se i sottotitoli sono attivi e NON ho gia'
+    # la trascrizione completa. Caricato UNA sola volta e riusato (ricaricarlo a
+    # ogni clip causava blocchi, specie su GPU).
+    transcriber = None
+    if subtitles_enabled and transcript is None:
+        from .subtitles import WhisperTranscriber
+        transcriber = WhisperTranscriber(model_size=model, language=language, device=device)
 
     outputs: List[str] = []
     for i, (start_time, end_time) in enumerate(clips, start=1):
@@ -141,6 +170,10 @@ def generate_shorts(
             _log(progress_cb, "[!] Generazione interrotta dall'utente.")
             break
         _log(progress_cb, f"[+] Short {i}/{len(clips)}: {start_time:.0f}s -> {end_time:.0f}s")
+        subs = None
+        if subtitles_enabled and transcript is not None:
+            from .transcript import slice_subtitles
+            subs = slice_subtitles(transcript, start_time, end_time)
         out_path = _render_short(
             video_path=video_path,
             start_time=start_time,
@@ -151,6 +184,7 @@ def generate_shorts(
             watermark_enabled=watermark_enabled,
             watermark_text=watermark_text,
             transcriber=transcriber,
+            subs=subs,
             settings=settings,
             progress_cb=progress_cb,
         )
@@ -171,6 +205,7 @@ def _render_short(
     watermark_enabled: bool,
     watermark_text: str,
     transcriber,
+    subs,
     settings: dict,
     progress_cb: Optional[ProgressCb],
 ) -> str:
@@ -190,19 +225,28 @@ def _render_short(
 
         layers = [vertical]
 
-        if transcriber is not None:
+        # Sottotitoli: o gia' pronti (affettati dalla trascrizione completa), o
+        # trascritti al volo per questa clip con Whisper.
+        sub_list = None
+        if subs is not None:
+            _log(progress_cb, "    - sottotitoli: dalla trascrizione completa")
+            sub_list = subs
+        elif transcriber is not None:
             _log(progress_cb, "    - sottotitoli: trascrizione con Whisper locale...")
-            from moviepy.video.tools.subtitles import SubtitlesClip
             from . import TEMP_DIR
 
             audio_tmp = str(TEMP_DIR / f"audio_{index}.wav")
             subclip.audio.write_audiofile(audio_tmp, logger=None)
-            subs = transcriber.transcribe(audio_tmp)
+            sub_list = transcriber.transcribe(audio_tmp)
+
+        if sub_list:
+            from moviepy.video.tools.subtitles import SubtitlesClip
+
             # Whisper su audio corto puo' allucinare timestamp oltre la fine clip:
             # vincoliamo i sottotitoli alla durata reale della clip.
             dur = vertical.duration
-            subs = [((s, min(e, dur)), t) for (s, e), t in subs if s < dur]
-            if subs:
+            sub_list = [((s, min(e, dur)), t) for (s, e), t in sub_list if s < dur]
+            if sub_list:
                 font_path = str(FONTS_DIR / settings.get("subtitle_font", "ptsans.ttf"))
                 gen = _subtitle_generator(
                     subtitles_color, font_path,
@@ -210,7 +254,7 @@ def _render_short(
                     int(settings.get("subtitle_stroke", SUBTITLE_STROKE)),
                 )
                 # Passiamo la lista (non il file) per evitare il bug UTF-8 di moviepy
-                subtitles = SubtitlesClip(subs, gen)
+                subtitles = SubtitlesClip(sub_list, gen)
                 layers.append(subtitles.set_pos(("center", vertical.h * 0.6)))
 
         if watermark_enabled:

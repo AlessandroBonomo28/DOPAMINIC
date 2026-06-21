@@ -60,6 +60,11 @@ UI_TRANS = {
     "📁  Sfoglia": "📁  Browse",
     "Numero di short": "Number of shorts",
     "Durata (s)": "Duration (s)",
+    "Rilevamento highlight": "Highlight detection",
+    "loudness = momenti più rumorosi (default).  talk = i monologhi più\n"
+    "lunghi, trascrivendo il video (ottimo per i longplay in cui parli a tratti).":
+        "loudness = loudest moments (default).  talk = the longest monologues,\n"
+        "by transcribing the video (great for longplays where you talk now and then).",
     "Face-tracking OpenCV  (segue i volti · più lento)":
         "Face-tracking OpenCV  (follows faces · slower)",
     "STILE": "STYLE",
@@ -169,6 +174,28 @@ def _model_label(model_id: str) -> str:
 
 def _model_id(label: str) -> str:
     return label.split(" ")[0]
+
+
+# Modalita' di rilevamento highlight: (id salvato, etichetta nel menu)
+HIGHLIGHT_MODES = [
+    ("loudness", "Per rumore (loudness)"),
+    ("talk", "Per parlato (talk)"),
+]
+MODE_LABELS = [lbl for _id, lbl in HIGHLIGHT_MODES]
+
+
+def _mode_label(mode_id: str) -> str:
+    for mid, lbl in HIGHLIGHT_MODES:
+        if mid == mode_id:
+            return lbl
+    return MODE_LABELS[0]  # default: loudness
+
+
+def _mode_id(label: str) -> str:
+    for mid, lbl in HIGHLIGHT_MODES:
+        if lbl == label:
+            return mid
+    return "loudness"
 
 
 def _recommended_model(vram_gb: float) -> str:
@@ -314,6 +341,7 @@ class App:
         self.video_path_var = tk.StringVar(value="Nessun file selezionato")
         self.clips_var = tk.StringVar(value=str(s["n_clips"]))
         self.duration_var = tk.StringVar(value=str(s["clip_duration"]))
+        self.highlight_mode_var = tk.StringVar(value=_mode_label(s.get("highlight_mode", "loudness")))
         self.face_tracking_var = tk.BooleanVar(value=s["opencv_face_tracking"])
         self.watermark_var = tk.BooleanVar(value=s["watermark"])
         self.watermark_text_var = tk.StringVar(value=s["watermark_text"])
@@ -328,11 +356,17 @@ class App:
 
     # ----------------------------------------------------------- widget helpers
     def _card(self, title: str) -> tk.Frame:
-        # Group box stile Win95/XP: bordo "groove" con titolo
+        # Group box stile Win95/XP: bordo "groove" con titolo.
+        # Il titolo e' un nostro Label (labelwidget) e non il titolo nativo del
+        # LabelFrame: su Windows quest'ultimo ignora 'fg' e resterebbe NERO anche
+        # in tema scuro. Con un Label il colore (ACCENT) e' rispettato e il
+        # retheme/traduzione continuano a funzionare (sono Label come gli altri).
         lf = tk.LabelFrame(
-            self.content, text=" " + title + " ", bg=CARD, fg=ACCENT,
-            font=F_SECTION, relief="groove", bd=2, padx=10, pady=8,
+            self.content, bg=CARD, fg=ACCENT,
+            relief="groove", bd=2, padx=10, pady=8,
         )
+        lf.configure(labelwidget=tk.Label(
+            lf, text=" " + title + " ", bg=CARD, fg=ACCENT, font=F_SECTION))
         lf.pack(fill="x", pady=(0, 10), padx=2)
         return lf
 
@@ -346,9 +380,13 @@ class App:
         )
 
     def _check(self, parent, text, var, command=None):
+        # selectcolor = interno del riquadro della spunta. Lo leghiamo a INPUT_BG
+        # (bianco in chiaro, scuro in dark): cosi' il segno di spunta, disegnato
+        # nel colore del testo, resta sempre leggibile (prima era fisso "white",
+        # quindi in dark un tick chiaro su bianco risultava invisibile).
         return tk.Checkbutton(
             parent, text=text, variable=var, command=command, bg=CARD, fg=FG,
-            selectcolor="white", activebackground=CARD, activeforeground=FG,
+            selectcolor=INPUT_BG, activebackground=CARD, activeforeground=FG,
             font=F_LABEL, anchor="w", bd=0, highlightthickness=0,
         )
 
@@ -448,11 +486,20 @@ class App:
         self._entry(c, self.clips_var, width=6).grid(row=0, column=1, sticky="w", pady=4)
         self._label(c, "Durata (s)").grid(row=0, column=2, sticky="w", padx=(16, 8), pady=4)
         self._entry(c, self.duration_var, width=6).grid(row=0, column=3, sticky="w", pady=4)
+        # Modalita' di rilevamento highlight
+        self._label(c, "Rilevamento highlight").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=(10, 0))
+        self._combo(c, self.highlight_mode_var, MODE_LABELS, width=22).grid(
+            row=1, column=1, columnspan=3, sticky="w", pady=(10, 0))
+        tk.Label(
+            c, text="loudness = momenti più rumorosi (default).  talk = i monologhi più\n"
+                    "lunghi, trascrivendo il video (ottimo per i longplay in cui parli a tratti).",
+            bg=CARD, fg=MUTED, font=("Tahoma", 9), anchor="w", justify="left",
+        ).grid(row=2, column=0, columnspan=4, sticky="w", pady=(2, 0))
         self._check(
             c, "Face-tracking OpenCV  (segue i volti · più lento)",
             self.face_tracking_var,
             command=lambda: self._ensure_dep("opencv", self.face_tracking_var),
-        ).grid(row=1, column=0, columnspan=4, sticky="w", pady=(10, 0))
+        ).grid(row=3, column=0, columnspan=4, sticky="w", pady=(10, 0))
 
         # --- Stile ---
         c = self._card("STILE")
@@ -780,9 +827,21 @@ class App:
         self.sounds.play(f, volume=0.6)
 
     def log(self, message: str):
+        self._progress_active = False  # una riga normale chiude la barra in corso
         self._log_lines.append(message)
         if len(self._log_lines) > 400:
             self._log_lines = self._log_lines[-400:]
+        self._redraw_log_text()
+
+    def log_progress(self, text: str):
+        """Aggiorna in place l'ultima riga del log (barra di avanzamento)."""
+        if getattr(self, "_progress_active", False) and self._log_lines:
+            self._log_lines[-1] = text
+        else:
+            self._log_lines.append(text)
+            self._progress_active = True
+            if len(self._log_lines) > 400:
+                self._log_lines = self._log_lines[-400:]
         self._redraw_log_text()
 
     def _redraw_log_text(self):
@@ -1056,6 +1115,7 @@ class App:
         self.settings.update({
             "n_clips": int(self.clips_var.get()),
             "clip_duration": int(self.duration_var.get()),
+            "highlight_mode": _mode_id(self.highlight_mode_var.get()),
             "opencv_face_tracking": self.face_tracking_var.get(),
             "watermark": self.watermark_var.get(),
             "watermark_text": self.watermark_text_var.get(),
@@ -1106,6 +1166,7 @@ class App:
                 path, n_clips, duration, settings,
                 progress_cb=lambda m: self.root.after(0, self.log, m),
                 should_cancel=self._cancel_event.is_set,
+                bar_cb=lambda m: self.root.after(0, self.log_progress, m),
             )
             self.root.after(0, self._on_done, outputs, None)
         except Exception as exc:  # noqa: BLE001

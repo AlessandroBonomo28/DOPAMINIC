@@ -25,6 +25,8 @@ L'idea è semplice: i momenti che funzionano in un video di solito sono quelli i
 4. Aggiunge il watermark e, se attivi, i sottotitoli generati in locale con Whisper, sincronizzati parola per parola.
 5. Salva gli short pronti nella cartella di output.
 
+Per il punto 1 hai due modi, dal menu "Rilevamento highlight" nella scheda Genera: **loudness** (default) prende le parti più rumorose, **talk** trascrive il video e prende i monologhi più lunghi, utile per i longplay in cui parli solo a tratti.
+
 Il testo (watermark e sottotitoli) viene disegnato con Pillow, quindi non serve ImageMagick né nessun altro programma di sistema. L'unica cosa che scarica da sola è ffmpeg, ma lo fa tramite `imageio-ffmpeg` e non devi installarlo a mano.
 
 ## Avvio rapido (da sorgente)

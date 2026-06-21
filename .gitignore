@@ -21,6 +21,7 @@ crash.log
 # Output e file temporanei
 output/
 temp/
+transcripts/
 *.mp4
 *.srt
 *.mp3

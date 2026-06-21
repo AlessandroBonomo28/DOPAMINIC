@@ -18,6 +18,17 @@ Keywords: generate, create, how to, start, produce, make, steps, short, split, c
 4) Press "GENERATE SHORTS" and wait: progress shows in the log at the bottom.
 Finished shorts go to the output folder ("Open output folder" button).
 
+## Highlight detection mode (loudness and talk)
+Keywords: detection, mode, loudness, talk, noise, speech, monologues, longplay, by talk, by loudness, how do I find moments
+In the Genera tab you choose how I find the moments to cut. "By loudness" is the
+default: I pick the loudest parts, usually laughs, shouts, action. "By talk" instead
+transcribes the whole video and picks the longest monologues, discarding noise and
+music: it's meant for longplays where you only talk now and then and want to catch the
+moments you speak. The full transcription is cached: if you run again on the same video
+(same model and language) I don't redo it, and I also reuse it for subtitles without
+re-transcribing each clip. Talk mode is heavier: on long videos a GPU helps a lot. The
+log shows a progress bar for the transcription.
+
 ## Number of shorts and duration
 Keywords: number, how many, duration, seconds, length, clip
 "Number of shorts" = how many clips to extract. "Duration" = length of each in seconds.

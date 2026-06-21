@@ -127,6 +127,56 @@ class WhisperTranscriber:
                 words.append((seg.start, seg.end, seg.text.strip()))
         return words
 
+    def _full(self, audio_path: str, progress=None):
+        """Trascrive l'intero file. Ritorna (lista_segmenti, durata_totale).
+
+        Ogni segmento e' un dict con metadati (no_speech_prob, avg_logprob,
+        compression_ratio) utili a scartare il non-parlato, piu' le parole con
+        i timestamp assoluti. `progress(frazione, posizione_s, totale_s)` viene
+        chiamato a ogni segmento per la barra di avanzamento.
+        """
+        model = self._model_obj()
+        segments, info = model.transcribe(
+            audio_path,
+            language=None if self.language == "auto" else self.language,
+            word_timestamps=True,
+            vad_filter=True,
+            condition_on_previous_text=False,
+        )
+        total = float(getattr(info, "duration", 0.0) or 0.0)
+        out = []
+        for seg in segments:  # qui scatta l'encode (eventuale errore CUDA emerge ora)
+            words = []
+            if seg.words:
+                for w in seg.words:
+                    text = w.word.strip()
+                    if text:
+                        words.append((float(w.start), float(w.end), text))
+            out.append({
+                "start": float(seg.start),
+                "end": float(seg.end),
+                "text": seg.text.strip(),
+                "no_speech_prob": float(getattr(seg, "no_speech_prob", 0.0)),
+                "avg_logprob": float(getattr(seg, "avg_logprob", 0.0)),
+                "compression_ratio": float(getattr(seg, "compression_ratio", 0.0)),
+                "words": words,
+            })
+            if progress is not None and total > 0:
+                progress(min(1.0, seg.end / total), float(seg.end), total)
+        return out, total
+
+    def transcribe_full(self, audio_path: str, progress=None):
+        """Come `_full`, con fallback a CPU (una volta) se la GPU non è usabile."""
+        try:
+            return self._full(audio_path, progress)
+        except Exception as exc:  # noqa: BLE001
+            if self.device == "cuda":
+                print(f"[!] GPU non utilizzabile ({exc}). Passo alla CPU.")
+                self.device = "cpu"
+                self._model = None
+                return self._full(audio_path, progress)
+            raise
+
     def transcribe(self, audio_path: str) -> List[Subtitle]:
         """Trascrive una clip. Fallback a CPU (una volta) se la GPU non è usabile."""
         try:

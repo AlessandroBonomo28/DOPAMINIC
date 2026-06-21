@@ -9,6 +9,8 @@ DEFAULTS = {
     # Output
     "n_clips": 5,
     "clip_duration": 23,
+    # Rilevamento highlight: "loudness" (momenti piu' rumorosi) | "talk" (monologhi piu' lunghi)
+    "highlight_mode": "loudness",
     # Crop verticale
     "opencv_face_tracking": False,   # False = crop centrale veloce, True = segue i volti (lento)
     # Watermark

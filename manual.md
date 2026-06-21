@@ -18,6 +18,17 @@ Parole chiave: generare, genero, generazione, creare, come si fa, avviare, produ
 4) Premi "GENERA SHORT" e aspetta: vedi l'avanzamento nel log in basso.
 Gli short finiti finiscono nella cartella output (pulsante "Apri cartella output").
 
+## Modalita' di rilevamento highlight (loudness e talk)
+Parole chiave: rilevamento, modalita', loudness, talk, rumore, parlato, monologhi, longplay, by talk, by loudness, come trovo i momenti
+Nella tab Genera scegli come trovo i momenti da tagliare. "Per rumore (loudness)" e'
+il default: prendo i tratti piu' rumorosi, di solito risate, urla, azione. "Per parlato
+(talk)" invece trascrive tutto il video e prende i monologhi piu' lunghi, scartando
+rumore e musica: e' pensato per i longplay in cui parli solo a tratti e vuoi beccare i
+momenti in cui parli. La trascrizione completa viene salvata in cache: se rilanci sullo
+stesso video (stesso modello e lingua) non la rifaccio, e la riuso anche per i
+sottotitoli senza ri-trascrivere clip per clip. La modalita' talk e' piu' pesante: con
+video lunghi conviene la GPU. Nel log vedi una barra di avanzamento della trascrizione.
+
 ## Numero di short e durata
 Parole chiave: numero, quanti, durata, secondi, lunghezza, clip
 "Numero di short" = quante clip estrarre. "Durata" = lunghezza di ognuna in secondi.
