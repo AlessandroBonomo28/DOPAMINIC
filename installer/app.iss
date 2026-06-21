@@ -2,10 +2,13 @@
 ; Compila con build.ps1 (consigliato) oppure aprendo questo file in Inno Setup.
 
 #define MyAppName "DOPAMINIC"
-#define MyAppVersion "1.0"
+#define MyAppVersion "1.1"
 #define MyAppPublisher "Goodman"
 
 [Setup]
+; AppId STABILE: ogni Setup con versione piu' alta aggiorna l'installazione
+; esistente (upgrade sul posto) invece di affiancarne una seconda.
+AppId={#MyAppName}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}

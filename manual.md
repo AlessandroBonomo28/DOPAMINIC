@@ -29,6 +29,14 @@ stesso video (stesso modello e lingua) non la rifaccio, e la riuso anche per i
 sottotitoli senza ri-trascrivere clip per clip. La modalita' talk e' piu' pesante: con
 video lunghi conviene la GPU. Nel log vedi una barra di avanzamento della trascrizione.
 
+## Aggiornamenti e versioni
+Parole chiave: aggiornamento, aggiornare, versione, versioni, update, release, downgrade, changelog, novita'
+In alto c'e' il pulsante "Versioni": apre l'elenco delle release pubblicate su GitHub, con il
+changelog di ognuna. Da li' puoi installare qualsiasi versione, anche tornare a una precedente
+(downgrade) per verificare. All'avvio controllo da solo se ce n'e' una piu' nuova: se si', sul
+pulsante "Versioni" compare un asterisco. Installando, scarico il pacchetto e lo lancio: si
+aggiorna sul posto. Serve connessione a internet solo in quel momento.
+
 ## Anteprima e modifica delle clip
 Parole chiave: anteprima, preview, editor, modifica, ritoccare, timeline, conferma, annulla, testina, inizio, fine
 Dopo aver premuto GENERA SHORT individuo i momenti e apro una finestra di anteprima

@@ -13,7 +13,7 @@ from tkinter import colorchooser, filedialog, messagebox, ttk
 
 from moviepy.editor import VideoFileClip
 
-from clipper import OUTPUT_DIR
+from clipper import OUTPUT_DIR, APP_VERSION
 from clipper.pipeline import detect_clips, render_clips
 from clipper.settings import load_settings, save_settings
 
@@ -78,6 +78,7 @@ UI_TRANS = {
     "al primo uso scarica le librerie CUDA (~1 GB). Altrimenti usa la CPU.":
         "Much faster on big models. Requires an NVIDIA GPU;\n"
         "first use downloads the CUDA libraries (~1 GB). Otherwise uses the CPU.",
+    "Versioni": "Versions",
     "GENERA SHORT": "GENERATE SHORTS",
     "GENERAZIONE IN CORSO...": "GENERATING...",
     "RILEVAMENTO...": "DETECTING...",
@@ -239,6 +240,7 @@ class App:
         self.video_path = None
         self._busy = False
         self._detection = None  # ultimo rilevamento (per l'anteprima): vedi _on_detected
+        self._update_info = None  # info ultima release piu' nuova (badge su Versioni)
         self._cancel_event = threading.Event()
         from clipper import deps
         self.gpu = deps.gpu_info()  # {"name","total_mb"} oppure None
@@ -265,6 +267,9 @@ class App:
             self._lang = "it"
             self._set_language("en")
         root.protocol("WM_DELETE_WINDOW", self._on_close)
+        # Controllo aggiornamenti (GitHub Releases), in background e non bloccante.
+        if self.settings.get("update_check", True):
+            threading.Thread(target=self._check_updates_worker, daemon=True).start()
 
     def _set_icon(self):
         """Icona dell'app dal file sleep.png (se presente)."""
@@ -294,6 +299,67 @@ class App:
         except Exception:
             pass
         self.root.destroy()
+
+    # ----------------------------------------------------------- aggiornamenti
+    def _check_updates_worker(self):
+        """Controlla su GitHub se c'e' una release piu' nuova (thread in background)."""
+        try:
+            from clipper.updater import check_for_update
+            info = check_for_update()
+        except Exception:
+            info = None
+        if info:
+            self.root.after(0, self._on_update_available, info)
+
+    def _on_update_available(self, info):
+        # Niente popup: segnalo con un pallino sul pulsante Versioni.
+        self._update_info = info
+        try:
+            self._versions_btn.config(
+                text=self._L("Versioni  *", "Versions  *"), bg=ACCENT, fg="#ffffff")
+        except Exception:
+            pass
+
+    def _open_versions(self):
+        from clipper.versions import VersionsWindow
+        colors = {"BG": BG, "CARD": CARD, "FG": FG, "MUTED": MUTED, "ACCENT": ACCENT,
+                  "INPUT_BG": INPUT_BG, "SUCCESS_HOVER": SUCCESS_HOVER}
+        VersionsWindow(self.root, colors=colors, lang=self._lang,
+                       current_version=APP_VERSION, on_install=self._install_version)
+
+    def _install_version(self, url, ver):
+        if url:
+            self._start_update_download(url, ver)
+        else:
+            import webbrowser
+            webbrowser.open(f"https://github.com/AlessandroBonomo28/DOPAMINIC/releases")
+
+    def _start_update_download(self, url, ver):
+        self.log(self._L(f"[update] Scarico DOPAMINIC {ver}...",
+                         f"[update] Downloading DOPAMINIC {ver}..."))
+
+        def worker():
+            try:
+                from clipper.updater import download, download_path
+                dest = download_path(ver)
+                download(url, dest, progress=lambda f: self.root.after(
+                    0, self.log_progress, f"[update] {int(f * 100)}%  scaricato"))
+                self.root.after(0, self._launch_update, dest)
+            except Exception as exc:  # noqa: BLE001
+                self.root.after(0, self.log, f"[update] Errore: {exc}")
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _launch_update(self, path):
+        self.log(self._L("[update] Avvio l'installer, l'app si chiude.",
+                         "[update] Launching the installer, the app will close."))
+        try:
+            from clipper.updater import launch_installer
+            launch_installer(path)
+        except Exception as exc:  # noqa: BLE001
+            self.log(f"[update] Errore avvio installer: {exc}")
+            return
+        self.root.after(800, self._on_close)
 
     # --------------------------------------------------------------- styling
     def _init_style(self):
@@ -427,6 +493,8 @@ class App:
         header.pack(fill="x")
         tk.Label(header, text="DOPAMINIC", bg=XP_BLUE, fg="white",
                  font=F_TITLE).pack(side="left", padx=8, pady=5)
+        self._versions_btn = self._btn(header, "Versioni", self._open_versions)
+        self._versions_btn.pack(side="left", padx=(0, 8), pady=4)
         self._asst_toggle_btn = self._btn(header, f"{self._asst_name} :)", self._toggle_assistant)
         self._asst_toggle_btn.pack(side="right", padx=6, pady=4)
         self._mute_btn = self._btn(header, "Musica: ON", self._toggle_mute)

@@ -29,6 +29,14 @@ moments you speak. The full transcription is cached: if you run again on the sam
 re-transcribing each clip. Talk mode is heavier: on long videos a GPU helps a lot. The
 log shows a progress bar for the transcription.
 
+## Updates and versions
+Keywords: update, upgrade, version, versions, release, downgrade, changelog, what's new
+At the top there's a "Versions" button: it opens the list of releases published on GitHub, each
+with its changelog. From there you can install any version, including going back to an older one
+(downgrade) to check. On startup I check by myself if a newer one exists: if so, an asterisk shows
+on the "Versions" button. When you install, I download the package and launch it: it upgrades in
+place. You only need internet at that moment.
+
 ## Preview and edit the clips
 Keywords: preview, editor, edit, tweak, timeline, confirm, cancel, playhead, start, end
 After you press GENERATE SHORTS I detect the moments and open a preview window in

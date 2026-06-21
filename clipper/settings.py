@@ -46,6 +46,8 @@ DEFAULTS = {
     "yt_description": "",             # descrizione (max 5000 caratteri)
     # Animazioni visualizzatore (stile Windows Media Player) dietro al log
     "viz_enabled": True,
+    # Controllo aggiornamenti all'avvio (GitHub Releases)
+    "update_check": True,
     # Effetti sonori (stile MSN)
     "sounds_enabled": True,
     "sound_send": "",                # vuoto = suono di default (invio)
