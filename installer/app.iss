@@ -2,7 +2,7 @@
 ; Compila con build.ps1 (consigliato) oppure aprendo questo file in Inno Setup.
 
 #define MyAppName "DOPAMINIC"
-#define MyAppVersion "1.1"
+#define MyAppVersion "1.2"
 #define MyAppPublisher "Goodman"
 
 [Setup]
