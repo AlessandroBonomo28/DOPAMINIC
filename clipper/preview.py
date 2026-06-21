@@ -10,6 +10,7 @@ Finestra in stile editor (CapCut-like, semplificato):
 Nessuna dipendenza extra: i fotogrammi arrivano da moviepy (get_frame) e vengono
 mostrati con Pillow (ImageTk).
 """
+import threading
 import tkinter as tk
 
 from PIL import Image, ImageTk
@@ -59,6 +60,13 @@ class PreviewEditor:
         self._seg_path = None       # ultimo WAV di segmento scritto (da rimuovere)
         self._play_end = 0.0        # tempo a cui fermare la riproduzione corrente
         self._cur_t = 0.0           # tempo del fotogramma mostrato (per re-render al resize)
+        # Miniature timeline: cache + code per la generazione on-demand
+        self._thumb_cache = {}      # key -> PhotoImage (solo main thread)
+        self._thumb_pending = set()
+        self._req_q = []
+        self._res_q = []
+        self._thumb_lock = threading.Lock()
+        self._closing = False
         self.col = dict(DEFAULT_COLORS)
         if colors:
             self.col.update({k: v for k, v in colors.items() if v})
@@ -94,6 +102,7 @@ class PreviewEditor:
         else:
             self._update_labels()
             self._draw_timeline()
+        self._start_thumbs()   # genera le miniature della timeline in background
 
     def _L(self, it, en):
         """Ritorna la stringa nella lingua dell'editor (it/en)."""
@@ -228,10 +237,17 @@ class PreviewEditor:
         # --- controlli play + conferma/annulla ---
         bar = tk.Frame(self.win, bg=col["BG"])
         bar.pack(fill="x", padx=10, pady=(6, 10))
-        self._btn(bar, self._L("|< Prec", "|< Prev"), lambda: self._step_sel(-1)).pack(side="left")
-        self.play_btn = self._btn(bar, "Play", self._toggle_play)
+        prev_btn = self._btn(bar, self._L("Clip precedente", "Previous clip"),
+                             lambda: self._step_sel(-1), primary=True)
+        prev_btn.config(font=("Tahoma", 10, "bold"), padx=12, pady=6)
+        prev_btn.pack(side="left", padx=(0, 4))
+        self.play_btn = self._btn(bar, self._L("Play", "Play"), self._toggle_play, primary=True)
+        self.play_btn.config(font=("Tahoma", 11, "bold"), padx=22, pady=6)
         self.play_btn.pack(side="left", padx=4)
-        self._btn(bar, self._L("Succ >|", "Next >|"), lambda: self._step_sel(1)).pack(side="left")
+        next_btn = self._btn(bar, self._L("Prossima clip", "Next clip"),
+                             lambda: self._step_sel(1), primary=True)
+        next_btn.config(font=("Tahoma", 10, "bold"), padx=12, pady=6)
+        next_btn.pack(side="left", padx=4)
         self.confirm_btn = self._btn(bar, self._L("Conferma e genera", "Confirm and generate"),
                                      self._confirm, primary=True)
         self.confirm_btn.pack(side="right")
@@ -314,6 +330,105 @@ class PreviewEditor:
             pass
 
     # ------------------------------------------------------------------ rendering
+    # ------------------------------------------------------------ miniature timeline
+    # Passi "comodi" (s): scelgo il piu' piccolo >= densita' richiesta dallo zoom,
+    # cosi' le miniature si allineano a una griglia stabile e cacheabile.
+    _NICE_STEPS = [0.5, 1, 2, 5, 10, 15, 20, 30, 60, 120, 300, 600]
+
+    def _start_thumbs(self):
+        threading.Thread(target=self._thumbs_worker, daemon=True).start()
+        self.win.after(120, self._poll_thumbs)
+
+    def _thumb_step(self, visible_dur, n):
+        raw = visible_dur / max(1, n)
+        for s in self._NICE_STEPS:
+            if s >= raw:
+                return s
+        return self._NICE_STEPS[-1]
+
+    def _tiles_for_view(self):
+        """Piastrelle CONTIGUE che riempiono la barra, ognuna mappata al frame
+        cacheato piu' vicino (zoom-adattivo, poche immagini distinte = poca CPU).
+
+        Ritorna [(x_left, key, th, tw)]; accoda al worker i frame mancanti.
+        """
+        import math
+        th = max(20, self.tl_h - 30)
+        tw = max(8, int(th * self.clip.w / self.clip.h))
+        usable = max(1, self.tl_w - 2 * self.tl_m)
+        n_tiles = max(1, int(math.ceil(usable / tw)))
+        # passo temporale tra frame DISTINTI (cacheati): adattato allo zoom
+        step = self._thumb_step(self._visible_dur(), n_tiles)
+        max_t = max(0.0, self.dur - 1.0 / self.fps)
+        tiles, need = [], []
+        for i in range(n_tiles):
+            xl = self.tl_m + i * tw
+            tc = self._x_to_t(xl + tw / 2.0)          # tempo al centro della piastrella
+            k = round(tc / step)
+            key = f"{step}:{k}"
+            tiles.append((xl, key, th, tw))
+            need.append((key, min(max(0.0, k * step), max_t), tw, th))
+        with self._thumb_lock:
+            for key, gen_t, w, h in need:
+                if key not in self._thumb_cache and key not in self._thumb_pending:
+                    self._thumb_pending.add(key)
+                    self._req_q.append((key, gen_t, w, h))
+        return tiles
+
+    def _thumbs_worker(self):
+        """Reader DEDICATO (no race col preview). Genera solo le miniature richieste."""
+        import time as _time
+        try:
+            from moviepy.editor import VideoFileClip
+            src = VideoFileClip(self.video_path)
+        except Exception:
+            return
+        try:
+            while not self._closing:
+                job = None
+                with self._thumb_lock:
+                    if self._req_q:
+                        job = self._req_q.pop()   # LIFO: prima le richieste piu' recenti (zoom attuale)
+                if job is None:
+                    _time.sleep(0.04)
+                    continue
+                key, t, tw, th = job
+                try:
+                    frame = src.get_frame(t)
+                    img = Image.fromarray(frame).resize((tw, th), Image.BILINEAR)
+                    with self._thumb_lock:
+                        self._res_q.append((key, img))
+                except Exception:
+                    with self._thumb_lock:
+                        self._thumb_pending.discard(key)
+        finally:
+            try:
+                src.close()
+            except Exception:
+                pass
+
+    def _poll_thumbs(self):
+        if getattr(self, "_closing", False):
+            return
+        pending = None
+        with self._thumb_lock:
+            if self._res_q:
+                pending, self._res_q = self._res_q, []
+        if pending:
+            for key, pil in pending:
+                try:
+                    self._thumb_cache[key] = ImageTk.PhotoImage(pil)
+                except Exception:
+                    pass
+                self._thumb_pending.discard(key)
+            if len(self._thumb_cache) > 600:      # cap memoria: riparte da capo
+                self._thumb_cache.clear()
+            self._draw_timeline()
+        try:
+            self.win.after(150, self._poll_thumbs)
+        except Exception:
+            pass
+
     def _draw_timeline(self):
         c = self.tl
         w = self.tl.winfo_width()
@@ -326,6 +441,14 @@ class PreviewEditor:
         ve = self.view_start + self._visible_dur()
         c.create_rectangle(m, y0, W - m, y1, fill=self.col["INPUT_BG"],
                            outline=self.col["MUTED"])
+        # Striscia di miniature (sfondo) a piastrelle contigue: riempie tutta la
+        # barra senza buchi, ogni piastrella mostra il frame piu' vicino in cache.
+        cy = (y0 + y1) // 2
+        for xl, key, _th, _tw in self._tiles_for_view():
+            photo = self._thumb_cache.get(key)
+            if photo is not None:
+                c.create_image(xl, cy, image=photo, anchor="w")
+        # Clip: tinta semi-trasparente (stipple) cosi' si vede la miniatura sotto.
         for i, (s, e) in enumerate(self.clips):
             if e < vs or s > ve:        # clip fuori dalla finestra visibile
                 continue
@@ -333,12 +456,13 @@ class PreviewEditor:
             x1 = min(W - m, self._t_to_x(e))
             sel = (i == self.sel)
             c.create_rectangle(x0, y0 + 2, x1, y1 - 2,
-                               fill=self.col["ACCENT"] if sel else self.col["SUCCESS_HOVER"],
-                               outline=self.col["FG"] if sel else self.col["MUTED"],
-                               width=2 if sel else 1)
+                               fill=self.col["ACCENT"] if sel else self.col["FG"],
+                               stipple="gray50" if sel else "gray25",
+                               outline=self.col["ACCENT"] if sel else self.col["MUTED"],
+                               width=3 if sel else 1)
             if x1 - x0 > 12:
-                c.create_text((x0 + x1) / 2, (y0 + y1) / 2, text=str(i + 1),
-                              fill="#ffffff" if sel else self.col["FG"], font=self.font_small)
+                c.create_text((x0 + x1) / 2, y0 + 9, text=str(i + 1),
+                              fill="#ffffff", font=self.font_small)
         if 0 <= self.sel < len(self.clips):
             s, e = self.clips[self.sel]
             for t, color in ((s, _HANDLE_START), (e, _HANDLE_END)):
@@ -648,6 +772,7 @@ class PreviewEditor:
 
     # ------------------------------------------------------------------ chiusura
     def _cleanup(self):
+        self._closing = True   # ferma worker miniature e poller
         self._playing = False
         self._stop_audio()
         self._remove_seg(self._seg_path)   # rimuovi l'ultimo WAV di segmento
