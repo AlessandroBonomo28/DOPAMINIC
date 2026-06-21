@@ -58,6 +58,7 @@ class PreviewEditor:
         self._seg_counter = 0       # nome file univoco per ogni segmento (evita file lock)
         self._seg_path = None       # ultimo WAV di segmento scritto (da rimuovere)
         self._play_end = 0.0        # tempo a cui fermare la riproduzione corrente
+        self._cur_t = 0.0           # tempo del fotogramma mostrato (per re-render al resize)
         self.col = dict(DEFAULT_COLORS)
         if colors:
             self.col.update({k: v for k, v in colors.items() if v})
@@ -105,8 +106,9 @@ class PreviewEditor:
         self.win.title(self._L("Anteprima e modifica clip - DOPAMINIC",
                                "Preview and edit clips - DOPAMINIC"))
         self.win.configure(bg=col["BG"])
-        self.win.geometry("980x880")
-        self.win.minsize(840, 760)
+        self.win.geometry("1020x900")
+        self.win.minsize(840, 720)
+        self.win.resizable(True, True)   # ridimensionabile e ingrandibile a finestra intera
         self.win.transient(self.parent)
         self.win.protocol("WM_DELETE_WINDOW", self._cancel)
 
@@ -116,10 +118,10 @@ class PreviewEditor:
 
         left = tk.Frame(top, bg=col["BG"])
         left.pack(side="left", fill="y", padx=(0, 10))
-        tk.Label(left, text="CLIP", bg=col["BG"], fg=col["ACCENT"],
-                 font=self.title_font).pack(anchor="w")
+        tk.Label(left, text=self._L("SHORT (clip)", "SHORTS (clips)"), bg=col["BG"],
+                 fg=col["ACCENT"], font=self.title_font).pack(anchor="w")
         self.listbox = tk.Listbox(
-            left, width=26, height=12, bg=col["INPUT_BG"], fg=col["FG"],
+            left, width=32, height=12, bg=col["INPUT_BG"], fg=col["FG"],
             selectbackground=col["ACCENT"], selectforeground="#ffffff",
             highlightthickness=1, highlightbackground=col["MUTED"],
             relief="flat", font=("Consolas", 10), activestyle="none",
@@ -133,13 +135,16 @@ class PreviewEditor:
 
         right = tk.Frame(top, bg=col["BG"])
         right.pack(side="left", fill="both", expand=True)
+        # time_lbl ancorata in basso, il canvas riempie il resto e cresce col resize
+        self.time_lbl = tk.Label(right, text="00:00.0", bg=col["BG"], fg=col["FG"],
+                                 font=("Consolas", 11, "bold"))
+        self.time_lbl.pack(side="bottom", pady=(4, 0))
         self.pv = tk.Canvas(right, width=self.disp_w, height=self.disp_h,
                             bg="#000000", highlightthickness=1,
                             highlightbackground=col["MUTED"])
-        self.pv.pack()
-        self.time_lbl = tk.Label(right, text="00:00.0", bg=col["BG"], fg=col["FG"],
-                                 font=("Consolas", 11, "bold"))
-        self.time_lbl.pack(pady=(4, 0))
+        self.pv.pack(side="top", fill="both", expand=True)
+        # ridisegna il fotogramma adattandolo alla nuova dimensione del canvas
+        self.pv.bind("<Configure>", lambda e: self._request_frame(self._cur_t))
 
         # --- istruzioni + regolazione fine della clip selezionata ---
         info = tk.Frame(self.win, bg=col["BG"])
@@ -212,11 +217,13 @@ class PreviewEditor:
                                  activebackground=col["ACCENT"], bd=0, highlightthickness=0)
         self.hbar.pack(fill="x", padx=10, pady=(0, 2))
         tk.Label(self.win, text=self._L(
-                     "Clicca sulla barra per spostare la testina (gialla). Rotella o "
-                     "tasti +/- per zoomare, trascina la barra sotto per scorrere.",
-                     "Click the bar to move the playhead (yellow). Wheel or +/- buttons "
-                     "to zoom, drag the bar below to scroll."),
-                 bg=col["BG"], fg=col["MUTED"], font=("Tahoma", 8)).pack(anchor="w", padx=12)
+                     "Clicca sulla barra per spostare la testina (gialla). Doppio click su uno "
+                     "short = vai al suo primo frame. Rotella o tasti +/- per zoomare, trascina "
+                     "la barra sotto per scorrere.",
+                     "Click the bar to move the playhead (yellow). Double-click a short = jump to "
+                     "its first frame. Wheel or +/- buttons to zoom, drag the bar below to scroll."),
+                 bg=col["BG"], fg=col["MUTED"], font=("Tahoma", 8), justify="left",
+                 wraplength=980).pack(anchor="w", padx=12)
 
         # --- controlli play + conferma/annulla ---
         bar = tk.Frame(self.win, bg=col["BG"])
@@ -361,16 +368,24 @@ class PreviewEditor:
     def _do_frame(self):
         self._frame_scheduled = False
         t = self._pending_t
+        self._cur_t = t
         try:
             frame = self.clip.get_frame(t)
         except Exception:
             return
         img = Image.fromarray(frame)
-        img.thumbnail((self.disp_w, self.disp_h))
+        cw = self.pv.winfo_width()
+        ch = self.pv.winfo_height()
+        if cw <= 1 or ch <= 1:               # canvas non ancora mappato
+            cw, ch = self.disp_w, self.disp_h
+        box_w, box_h = max(16, cw - 4), max(16, ch - 4)
+        # scala per riempire il canvas mantenendo l'aspetto (anche ingrandendo)
+        scale = min(box_w / img.width, box_h / img.height)
+        img = img.resize((max(1, int(img.width * scale)), max(1, int(img.height * scale))),
+                         Image.LANCZOS)
         self._photo = ImageTk.PhotoImage(img)
         self.pv.delete("frame")
-        self.pv.create_image(self.disp_w // 2, self.disp_h // 2,
-                             image=self._photo, anchor="center", tags="frame")
+        self.pv.create_image(cw // 2, ch // 2, image=self._photo, anchor="center", tags="frame")
         self.time_lbl.config(text=_fmt(t))
 
     # ------------------------------------------------------------------ selezione
