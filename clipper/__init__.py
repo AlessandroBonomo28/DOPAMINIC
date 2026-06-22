@@ -9,7 +9,7 @@ from pathlib import Path
 
 # Versione dell'app (confrontata con l'ultima release su GitHub per gli update).
 # Tenere allineata a MyAppVersion in installer/app.iss.
-APP_VERSION = "1.2"
+APP_VERSION = "1.3"
 
 # Radice del programma (cartella che contiene questo pacchetto). Contiene gli
 # asset di sola lettura: data/ (cascade) e fonts/.
