@@ -11,8 +11,10 @@ DEFAULTS = {
     "clip_duration": 23,
     # Rilevamento highlight: "loudness" (momenti piu' rumorosi) | "talk" (monologhi piu' lunghi)
     "highlight_mode": "loudness",
-    # Crop verticale
-    "opencv_face_tracking": False,   # False = crop centrale veloce, True = segue i volti (lento)
+    # Crop verticale / tracking
+    "tracking_enabled": False,       # spunta: attiva il tracking (altrimenti crop centrale)
+    "tracking_mode": "opencv",       # opencv (volti) | vtuber_right | vtuber_left
+    "opencv_face_tracking": False,   # legacy (vecchie versioni); letto solo per migrazione
     # Watermark
     "watermark": True,
     "watermark_text": "@notset",

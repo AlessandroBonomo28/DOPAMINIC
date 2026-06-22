@@ -118,8 +118,49 @@ def crop_face_tracking(clip: VideoClip, segment_duration: float = 3.0) -> VideoC
     return concatenate_videoclips(segments)
 
 
-def crop_to_vertical(clip: VideoClip, use_face_tracking: bool) -> VideoClip:
-    """Dispatch: face-tracking se richiesto, altrimenti crop centrale veloce."""
-    if use_face_tracking:
-        return crop_face_tracking(clip)
-    return crop_center(clip)
+# Durata (s) di ogni blocco nelle modalita' VTUBER: si alterna centro/lato.
+VTUBER_PERIOD = 5.0
+
+
+def crop_vtuber(clip: VideoClip, side: str = "right", period: float = VTUBER_PERIOD) -> VideoClip:
+    """Crop 9:16 che alterna ogni `period` secondi tra il CENTRO e un LATO.
+
+    Pensato per i vtuber: l'avatar sta in un angolo (dx o sx), quindi si mostra
+    un blocco di gameplay centrale e un blocco sull'avatar, a turno. Non usa
+    OpenCV: e' solo un ritaglio che cambia posizione, quindi veloce.
+    """
+    target_width = int(clip.h * TARGET_RATIO)
+    half = target_width / 2
+    x_center = clip.w / 2
+    x_side = half if side == "left" else clip.w - half
+    x_side = max(half, min(clip.w - half, x_side))   # resta dentro l'inquadratura
+
+    segments = []
+    t, i = 0.0, 0
+    while t < clip.duration:
+        end_time = min(t + period, clip.duration)
+        subclip = clip.subclip(t, end_time)
+        xc = x_center if (i % 2 == 0) else x_side     # i pari = centro, dispari = lato
+        cropped = crop(subclip, width=target_width, height=clip.h, x_center=xc)
+        segments.append(cropped.resize((TARGET_W, TARGET_H)))
+        t += period
+        i += 1
+
+    return concatenate_videoclips(segments)
+
+
+def crop_to_vertical(clip: VideoClip, tracking_enabled: bool, mode: str = "opencv") -> VideoClip:
+    """Dispatch del crop verticale.
+
+    - tracking disattivato -> crop centrale veloce.
+    - "opencv"      -> face-tracking (segue il volto).
+    - "vtuber_right"-> alterna centro/destra ogni 5s.
+    - "vtuber_left" -> alterna centro/sinistra ogni 5s.
+    """
+    if not tracking_enabled:
+        return crop_center(clip)
+    if mode == "vtuber_right":
+        return crop_vtuber(clip, "right")
+    if mode == "vtuber_left":
+        return crop_vtuber(clip, "left")
+    return crop_face_tracking(clip)

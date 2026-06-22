@@ -158,7 +158,9 @@ def render_clips(
     if not clips:
         return []
 
-    use_face_tracking = settings.get("opencv_face_tracking", False)
+    # Tracking: nuove chiavi, con migrazione dal vecchio "opencv_face_tracking".
+    tracking_enabled = settings.get("tracking_enabled", settings.get("opencv_face_tracking", False))
+    tracking_mode = settings.get("tracking_mode", "opencv")
     subtitles_enabled = settings.get("subtitles_enabled", False)
     subtitles_color = settings.get("subtitles_color", "#FFFFFF")
     watermark_enabled = settings.get("watermark", True)
@@ -194,7 +196,8 @@ def render_clips(
             start_time=start_time,
             end_time=end_time,
             index=i,
-            use_face_tracking=use_face_tracking,
+            tracking_enabled=tracking_enabled,
+            tracking_mode=tracking_mode,
             subtitles_color=subtitles_color,
             watermark_enabled=watermark_enabled,
             watermark_text=watermark_text,
@@ -231,7 +234,8 @@ def _render_short(
     start_time: float,
     end_time: float,
     index: int,
-    use_face_tracking: bool,
+    tracking_enabled: bool,
+    tracking_mode: str,
     subtitles_color: str,
     watermark_enabled: bool,
     watermark_text: str,
@@ -250,9 +254,16 @@ def _render_short(
     try:
         subclip = src.subclip(start_time, end_time)
 
-        mode = "face-tracking (OpenCV)" if use_face_tracking else "crop centrale"
-        _log(progress_cb, f"    - crop verticale: {mode}")
-        vertical = crop_to_vertical(subclip, use_face_tracking)
+        if not tracking_enabled:
+            label = "crop centrale"
+        elif tracking_mode == "vtuber_right":
+            label = "VTUBER destra (centro/destra ogni 5s)"
+        elif tracking_mode == "vtuber_left":
+            label = "VTUBER sinistra (centro/sinistra ogni 5s)"
+        else:
+            label = "face-tracking (OpenCV)"
+        _log(progress_cb, f"    - crop verticale: {label}")
+        vertical = crop_to_vertical(subclip, tracking_enabled, tracking_mode)
 
         layers = [vertical]
 

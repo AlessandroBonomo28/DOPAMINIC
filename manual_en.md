@@ -56,11 +56,14 @@ Keywords: number, how many, duration, seconds, length, clip
 If the video is too short for your values, I adapt them automatically. If I find fewer
 distinct moments than requested, I generate the available ones and tell you in the log.
 
-## Face-tracking OpenCV
-Keywords: face tracking, faces, opencv, face, framing, crop
-If enabled, the vertical crop follows the most centered face instead of cropping center.
-It's slower and needs the OpenCV library (I offer to download it on first use). If your
-video has no faces (gameplay, screens), leave it OFF: much faster, nearly identical result.
+## Crop tracking (OpenCV and VTUBER)
+Keywords: tracking, face tracking, faces, opencv, vtuber, avatar, framing, crop, right, left
+The vertical crop has a "Tracking" checkbox and a mode menu. Off = fast center crop.
+"OpenCV (faces)" follows the most centered face (slower, needs the OpenCV library which I offer
+to download on first use; if the video has no faces, skip it). "VTUBER right" and "VTUBER left"
+alternate every 5 seconds between the center of the screen and the side where the avatar sits
+(right or left): so you show some gameplay and some avatar, in turns. The VTUBER modes don't
+need OpenCV and are fast.
 
 ## Watermark
 Keywords: watermark, logo, signature, overlay text, brand

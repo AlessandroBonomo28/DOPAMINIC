@@ -65,8 +65,10 @@ UI_TRANS = {
     "lunghi, trascrivendo il video (ottimo per i longplay in cui parli a tratti).":
         "loudness = loudest moments (default).  talk = the longest monologues,\n"
         "by transcribing the video (great for longplays where you talk now and then).",
-    "Face-tracking OpenCV  (segue i volti · più lento)":
-        "Face-tracking OpenCV  (follows faces · slower)",
+    "OpenCV = segue i volti (più lento).  VTUBER = alterna ogni 5s tra centro\n"
+    "e lato (destra/sinistra) dove sta l'avatar. Il tracking spento = crop centrale.":
+        "OpenCV = follows faces (slower).  VTUBER = every 5s alternates between center\n"
+        "and the side (right/left) where the avatar sits. Tracking off = center crop.",
     "STILE": "STYLE",
     "Sottotitoli (Whisper locale)": "Subtitles (local Whisper)",
     "Colore": "Color",
@@ -199,6 +201,29 @@ def _mode_id(label: str) -> str:
         if lbl == label:
             return mid
     return "loudness"
+
+
+# Modalita' di tracking del crop verticale: (id salvato, etichetta nel menu)
+TRACKING_MODES = [
+    ("opencv", "OpenCV (volti)"),
+    ("vtuber_right", "VTUBER destra"),
+    ("vtuber_left", "VTUBER sinistra"),
+]
+TRACK_LABELS = [lbl for _id, lbl in TRACKING_MODES]
+
+
+def _track_label(mode_id: str) -> str:
+    for mid, lbl in TRACKING_MODES:
+        if mid == mode_id:
+            return lbl
+    return TRACK_LABELS[0]
+
+
+def _track_id(label: str) -> str:
+    for mid, lbl in TRACKING_MODES:
+        if lbl == label:
+            return mid
+    return "opencv"
 
 
 def _recommended_model(vram_gb: float) -> str:
@@ -411,7 +436,10 @@ class App:
         self.clips_var = tk.StringVar(value=str(s["n_clips"]))
         self.duration_var = tk.StringVar(value=str(s["clip_duration"]))
         self.highlight_mode_var = tk.StringVar(value=_mode_label(s.get("highlight_mode", "loudness")))
-        self.face_tracking_var = tk.BooleanVar(value=s["opencv_face_tracking"])
+        # Tracking: spunta + modalita' (migrazione dal vecchio opencv_face_tracking)
+        self.tracking_enabled_var = tk.BooleanVar(
+            value=s.get("tracking_enabled", s.get("opencv_face_tracking", False)))
+        self.tracking_mode_var = tk.StringVar(value=_track_label(s.get("tracking_mode", "opencv")))
         self.watermark_var = tk.BooleanVar(value=s["watermark"])
         self.watermark_text_var = tk.StringVar(value=s["watermark_text"])
         self.subtitles_var = tk.BooleanVar(value=s["subtitles_enabled"])
@@ -566,11 +594,18 @@ class App:
                     "lunghi, trascrivendo il video (ottimo per i longplay in cui parli a tratti).",
             bg=CARD, fg=MUTED, font=("Tahoma", 9), anchor="w", justify="left",
         ).grid(row=2, column=0, columnspan=4, sticky="w", pady=(2, 0))
+        # Tracking: spunta per attivarlo + menu della modalita'
         self._check(
-            c, "Face-tracking OpenCV  (segue i volti · più lento)",
-            self.face_tracking_var,
-            command=lambda: self._ensure_dep("opencv", self.face_tracking_var),
-        ).grid(row=3, column=0, columnspan=4, sticky="w", pady=(10, 0))
+            c, "Tracking", self.tracking_enabled_var, command=self._on_tracking_change,
+        ).grid(row=3, column=0, sticky="w", pady=(10, 0))
+        self.track_combo = self._combo(c, self.tracking_mode_var, TRACK_LABELS, width=18)
+        self.track_combo.grid(row=3, column=1, columnspan=3, sticky="w", pady=(10, 0))
+        self.track_combo.bind("<<ComboboxSelected>>", lambda e: self._on_tracking_change())
+        tk.Label(
+            c, text="OpenCV = segue i volti (più lento).  VTUBER = alterna ogni 5s tra centro\n"
+                    "e lato (destra/sinistra) dove sta l'avatar. Il tracking spento = crop centrale.",
+            bg=CARD, fg=MUTED, font=("Tahoma", 9), anchor="w", justify="left",
+        ).grid(row=4, column=0, columnspan=4, sticky="w", pady=(2, 0))
 
         # --- Stile ---
         c = self._card("STILE")
@@ -1037,6 +1072,11 @@ class App:
             var.set(False)
             messagebox.showerror("Installazione", "Installazione fallita. Controlla il log.")
 
+    def _on_tracking_change(self):
+        """OpenCV serve solo per la modalita' volti; le VTUBER non hanno dipendenze."""
+        if self.tracking_enabled_var.get() and _track_id(self.tracking_mode_var.get()) == "opencv":
+            self._ensure_dep("opencv", self.tracking_enabled_var)
+
     def _ensure_gpu(self):
         """Attivando la GPU: verifica la presenza di una NVIDIA e installa le librerie CUDA."""
         from clipper import deps
@@ -1193,7 +1233,8 @@ class App:
             "n_clips": int(self.clips_var.get()),
             "clip_duration": int(self.duration_var.get()),
             "highlight_mode": _mode_id(self.highlight_mode_var.get()),
-            "opencv_face_tracking": self.face_tracking_var.get(),
+            "tracking_enabled": self.tracking_enabled_var.get(),
+            "tracking_mode": _track_id(self.tracking_mode_var.get()),
             "watermark": self.watermark_var.get(),
             "watermark_text": self.watermark_text_var.get(),
             "subtitles_enabled": self.subtitles_var.get(),

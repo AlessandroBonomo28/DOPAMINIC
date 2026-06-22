@@ -56,12 +56,14 @@ Parole chiave: numero, quanti, durata, secondi, lunghezza, clip
 Se il video è troppo corto per i valori scelti, li adatto in automatico. Se trovo meno
 momenti distinti di quelli richiesti, genero quelli disponibili e te lo dico nel log.
 
-## Face-tracking OpenCV
-Parole chiave: face tracking, volti, opencv, faccia, inquadratura, crop, ritaglio
-Se attivo, il ritaglio verticale segue il volto più centrato invece di tagliare al centro.
-È più lento e richiede la libreria OpenCV (te la propongo da scaricare al primo uso).
-Se il tuo video non ha volti (gameplay, schermate), lascialo OFF: vai molto più veloce
-e il risultato è praticamente identico.
+## Tracking del crop (OpenCV e VTUBER)
+Parole chiave: tracking, face tracking, volti, opencv, vtuber, avatar, inquadratura, crop, ritaglio, destra, sinistra
+Il crop verticale ha una spunta "Tracking" e un menu con la modalità. Spento = crop centrale
+veloce. "OpenCV (volti)" segue il volto più centrato (più lento, richiede la libreria OpenCV
+che ti propongo da scaricare al primo uso; se il video non ha volti lascialo perdere).
+"VTUBER destra" e "VTUBER sinistra" alternano ogni 5 secondi tra il centro dello schermo e il
+lato dove sta l'avatar (destra o sinistra): così mostri un po' di gameplay e un po' l'avatar, a
+turno. Le modalità VTUBER non richiedono OpenCV e sono veloci.
 
 ## Watermark
 Parole chiave: watermark, logo, firma, testo sovraimpresso, marchio
