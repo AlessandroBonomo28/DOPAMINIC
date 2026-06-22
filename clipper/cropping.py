@@ -7,6 +7,7 @@ Due modalita':
 """
 from functools import lru_cache
 
+import numpy as np
 from moviepy.editor import VideoClip, concatenate_videoclips
 from moviepy.video.fx.all import crop
 
@@ -149,6 +150,150 @@ def crop_vtuber(clip: VideoClip, side: str = "right", period: float = VTUBER_PER
     return concatenate_videoclips(segments)
 
 
+# --------------------------------------------------------------------------- #
+# Modalita' LONGPLAY: pan singolo che segue chi parla (volto + audio) nelle
+# cutscene e l'azione (movimento) nel gameplay. Detector YuNet (fallback Haar).
+# --------------------------------------------------------------------------- #
+YUNET_MODEL = DATA_DIR / "face_detection_yunet_2023mar.onnx"
+LONGPLAY_STEP = 0.4       # secondi tra un campionamento e l'altro
+DETECT_WIDTH = 360        # i frame vengono ridotti a questa larghezza per la detezione
+AUDIO_ACTIVE = 0.35       # soglia (0..1) sopra cui consideriamo "si sta parlando"
+
+
+@lru_cache(maxsize=1)
+def _yunet():
+    """FaceDetectorYN (YuNet) se il modello c'e', altrimenti None (fallback Haar)."""
+    if not YUNET_MODEL.exists():
+        return None
+    try:
+        cv2 = _cv2()
+        return cv2.FaceDetectorYN.create(str(YUNET_MODEL), "", (320, 320), 0.6, 0.3, 5000)
+    except Exception:
+        return None
+
+
+def _detect_small(small_rgb):
+    """Volti su un frame RGB ridotto. Ritorna [(cx, cy, w, h, score)] in coord. del frame ridotto."""
+    cv2 = _cv2()
+    bgr = cv2.cvtColor(small_rgb, cv2.COLOR_RGB2BGR)
+    out = []
+    det = _yunet()
+    if det is not None:
+        h, w = bgr.shape[:2]
+        det.setInputSize((w, h))
+        _, faces = det.detect(bgr)
+        if faces is not None:
+            for f in faces:
+                out.append((float(f[0] + f[2] / 2), float(f[1] + f[3] / 2),
+                            float(f[2]), float(f[3]), float(f[-1])))
+        return out
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    for (x, y, w, h) in _face_cascade().detectMultiScale(gray, 1.2, 5):
+        out.append((x + w / 2, y + h / 2, float(w), float(h), 1.0))
+    return out
+
+
+def _audio_envelope(clip, step):
+    """Inviluppo RMS (0..1) dell'audio per finestre di `step` secondi. None se assente."""
+    import wave
+    from . import TEMP_DIR, ensure_dirs
+    if clip.audio is None:
+        return None
+    ensure_dirs()
+    wav = str(TEMP_DIR / "longplay_audio.wav")
+    try:
+        clip.audio.write_audiofile(wav, fps=22050, nbytes=2, logger=None)
+        with wave.open(wav, "rb") as wf:
+            ch, fr = wf.getnchannels(), wf.getframerate()
+            a = np.frombuffer(wf.readframes(wf.getnframes()), dtype=np.int16).astype(np.float32)
+        if ch > 1:
+            a = a.reshape(-1, ch).mean(axis=1)
+        win = max(1, int(step * fr))
+        n = max(1, len(a) // win)
+        rms = np.array([np.sqrt(np.mean(a[i * win:(i + 1) * win] ** 2)) for i in range(n)])
+        peak = rms.max()
+        return rms / peak if peak > 0 else rms
+    except Exception:
+        return None
+
+
+def _motion_center_x(prev_gray, gray, inv):
+    """Colonna (in coord. piene) col baricentro del movimento tra due frame, o None."""
+    if prev_gray is None:
+        return None
+    mask = np.abs(gray.astype(np.int16) - prev_gray.astype(np.int16)) > 18
+    colsum = mask.sum(axis=0).astype(np.float32)
+    total = colsum.sum()
+    if total < mask.size * 0.004:        # quasi fermo: niente target dal movimento
+        return None
+    cx_small = float((np.arange(len(colsum)) * colsum).sum() / total)
+    return cx_small * inv
+
+
+def _ema(arr, alpha=0.25):
+    """Media mobile esponenziale: rende il pan dolce."""
+    out = np.array(arr, dtype=np.float32)
+    for i in range(1, len(out)):
+        out[i] = alpha * out[i] + (1 - alpha) * out[i - 1]
+    return out
+
+
+def crop_longplay(clip: VideoClip, step: float = LONGPLAY_STEP) -> VideoClip:
+    """Pan 9:16 per longplay: inquadra chi parla (volto + audio) o l'azione (movimento)."""
+    cv2 = _cv2()
+    w, h = clip.w, clip.h
+    target_width = int(h * TARGET_RATIO)
+    half = target_width / 2.0
+    dur = clip.duration
+
+    env = _audio_envelope(clip, step)
+
+    def talking(t):
+        if env is None:
+            return True                  # senza audio: aggancia comunque i volti prominenti
+        return env[min(len(env) - 1, int(t / step))] > AUDIO_ACTIVE
+
+    times = np.arange(0.0, max(step, dur), step)
+    targets, cur, prev_gray = [], w / 2.0, None
+    for t in times:
+        try:
+            frame = clip.get_frame(min(float(t), dur - 1e-3))
+        except Exception:
+            targets.append(cur)
+            continue
+        small = cv2.resize(frame, (DETECT_WIDTH, max(1, int(h * DETECT_WIDTH / w)))) \
+            if w > DETECT_WIDTH else frame
+        inv = w / small.shape[1]
+        gray = cv2.cvtColor(cv2.cvtColor(small, cv2.COLOR_RGB2BGR), cv2.COLOR_BGR2GRAY)
+
+        target = None
+        faces = [f for f in _detect_small(small) if f[2] >= 0.06 * small.shape[1]]
+        if faces and talking(float(t)):
+            dom = max(faces, key=lambda f: f[2] * f[3] * max(0.1, f[4]))  # area x confidenza
+            target = dom[0] * inv
+        if target is None:
+            target = _motion_center_x(prev_gray, gray, inv)
+        if target is None:
+            target = cur
+        cur = target
+        targets.append(target)
+        prev_gray = gray
+
+    smooth = np.clip(_ema(targets), half, max(half, w - half))
+
+    def make_frame(t):
+        f = clip.get_frame(t)
+        xc = float(np.interp(t, times, smooth))
+        x0 = int(round(min(max(xc - half, 0), max(0, w - target_width))))
+        return np.ascontiguousarray(f[:, x0:x0 + target_width])
+
+    panned = VideoClip(make_frame, duration=dur)
+    panned.fps = clip.fps or 24
+    if clip.audio is not None:
+        panned = panned.set_audio(clip.audio)
+    return panned.resize((TARGET_W, TARGET_H))
+
+
 def crop_to_vertical(clip: VideoClip, tracking_enabled: bool, mode: str = "opencv") -> VideoClip:
     """Dispatch del crop verticale.
 
@@ -163,4 +308,6 @@ def crop_to_vertical(clip: VideoClip, tracking_enabled: bool, mode: str = "openc
         return crop_vtuber(clip, "right")
     if mode == "vtuber_left":
         return crop_vtuber(clip, "left")
+    if mode == "longplay":
+        return crop_longplay(clip)
     return crop_face_tracking(clip)

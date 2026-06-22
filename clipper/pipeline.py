@@ -257,9 +257,11 @@ def _render_short(
         if not tracking_enabled:
             label = "crop centrale"
         elif tracking_mode == "vtuber_right":
-            label = "VTUBER destra (centro/destra ogni 5s)"
+            label = "YOUTUBER FACE destra (centro/destra ogni 5s)"
         elif tracking_mode == "vtuber_left":
-            label = "VTUBER sinistra (centro/sinistra ogni 5s)"
+            label = "YOUTUBER FACE sinistra (centro/sinistra ogni 5s)"
+        elif tracking_mode == "longplay":
+            label = "longplay (volti + azione)"
         else:
             label = "face-tracking (OpenCV)"
         _log(progress_cb, f"    - crop verticale: {label}")

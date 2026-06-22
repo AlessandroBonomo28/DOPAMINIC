@@ -56,14 +56,17 @@ Parole chiave: numero, quanti, durata, secondi, lunghezza, clip
 Se il video è troppo corto per i valori scelti, li adatto in automatico. Se trovo meno
 momenti distinti di quelli richiesti, genero quelli disponibili e te lo dico nel log.
 
-## Tracking del crop (OpenCV e VTUBER)
-Parole chiave: tracking, face tracking, volti, opencv, vtuber, avatar, inquadratura, crop, ritaglio, destra, sinistra
+## Tracking del crop (OpenCV, YOUTUBER FACE, Longplay)
+Parole chiave: tracking, face tracking, volti, opencv, youtuber, vtuber, avatar, longplay, gameplay, cutscene, inquadratura, crop, ritaglio, destra, sinistra
 Il crop verticale ha una spunta "Tracking" e un menu con la modalità. Spento = crop centrale
 veloce. "OpenCV (volti)" segue il volto più centrato (più lento, richiede la libreria OpenCV
 che ti propongo da scaricare al primo uso; se il video non ha volti lascialo perdere).
-"VTUBER destra" e "VTUBER sinistra" alternano ogni 5 secondi tra il centro dello schermo e il
-lato dove sta l'avatar (destra o sinistra): così mostri un po' di gameplay e un po' l'avatar, a
-turno. Le modalità VTUBER non richiedono OpenCV e sono veloci.
+"YOUTUBER FACE destra" e "YOUTUBER FACE sinistra" alternano ogni 5 secondi tra il centro dello
+schermo e il lato dove sta l'avatar/faccia (destra o sinistra): così mostri un po' di gameplay e
+un po' l'avatar, a turno. Non richiedono OpenCV e sono veloci.
+"Longplay (volti + azione)" è pensata per i gameplay lunghi: quando qualcuno parla in una cutscene
+inquadra il volto di chi parla (volto + audio), altrimenti segue il punto dove c'è l'azione
+(il movimento), con un pan fluido. Usa OpenCV (te lo propongo da scaricare al primo uso).
 
 ## Watermark
 Parole chiave: watermark, logo, firma, testo sovraimpresso, marchio

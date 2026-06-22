@@ -65,10 +65,12 @@ UI_TRANS = {
     "lunghi, trascrivendo il video (ottimo per i longplay in cui parli a tratti).":
         "loudness = loudest moments (default).  talk = the longest monologues,\n"
         "by transcribing the video (great for longplays where you talk now and then).",
-    "OpenCV = segue i volti (più lento).  VTUBER = alterna ogni 5s tra centro\n"
-    "e lato (destra/sinistra) dove sta l'avatar. Il tracking spento = crop centrale.":
-        "OpenCV = follows faces (slower).  VTUBER = every 5s alternates between center\n"
-        "and the side (right/left) where the avatar sits. Tracking off = center crop.",
+    "OpenCV = segue i volti.  YOUTUBER FACE = alterna ogni 5s centro/lato dove sta\n"
+    "l'avatar.  Longplay = inquadra chi parla nelle cutscene e segue l'azione nel\n"
+    "gameplay.  Tracking spento = crop centrale.":
+        "OpenCV = follows faces.  YOUTUBER FACE = every 5s alternates center/side where the\n"
+        "avatar sits.  Longplay = frames who talks in cutscenes and follows the action in\n"
+        "gameplay.  Tracking off = center crop.",
     "STILE": "STYLE",
     "Sottotitoli (Whisper locale)": "Subtitles (local Whisper)",
     "Colore": "Color",
@@ -206,8 +208,9 @@ def _mode_id(label: str) -> str:
 # Modalita' di tracking del crop verticale: (id salvato, etichetta nel menu)
 TRACKING_MODES = [
     ("opencv", "OpenCV (volti)"),
-    ("vtuber_right", "VTUBER destra"),
-    ("vtuber_left", "VTUBER sinistra"),
+    ("vtuber_right", "YOUTUBER FACE destra"),
+    ("vtuber_left", "YOUTUBER FACE sinistra"),
+    ("longplay", "Longplay (volti + azione)"),
 ]
 TRACK_LABELS = [lbl for _id, lbl in TRACKING_MODES]
 
@@ -602,8 +605,9 @@ class App:
         self.track_combo.grid(row=3, column=1, columnspan=3, sticky="w", pady=(10, 0))
         self.track_combo.bind("<<ComboboxSelected>>", lambda e: self._on_tracking_change())
         tk.Label(
-            c, text="OpenCV = segue i volti (più lento).  VTUBER = alterna ogni 5s tra centro\n"
-                    "e lato (destra/sinistra) dove sta l'avatar. Il tracking spento = crop centrale.",
+            c, text="OpenCV = segue i volti.  YOUTUBER FACE = alterna ogni 5s centro/lato dove sta\n"
+                    "l'avatar.  Longplay = inquadra chi parla nelle cutscene e segue l'azione nel\n"
+                    "gameplay.  Tracking spento = crop centrale.",
             bg=CARD, fg=MUTED, font=("Tahoma", 9), anchor="w", justify="left",
         ).grid(row=4, column=0, columnspan=4, sticky="w", pady=(2, 0))
 
@@ -1073,8 +1077,9 @@ class App:
             messagebox.showerror("Installazione", "Installazione fallita. Controlla il log.")
 
     def _on_tracking_change(self):
-        """OpenCV serve solo per la modalita' volti; le VTUBER non hanno dipendenze."""
-        if self.tracking_enabled_var.get() and _track_id(self.tracking_mode_var.get()) == "opencv":
+        """OpenCV serve per le modalita' 'opencv' e 'longplay'; le YOUTUBER FACE no."""
+        if self.tracking_enabled_var.get() and \
+                _track_id(self.tracking_mode_var.get()) in ("opencv", "longplay"):
             self._ensure_dep("opencv", self.tracking_enabled_var)
 
     def _ensure_gpu(self):
